@@ -15,7 +15,7 @@ on:
       aisix_ref:
         description: "evlon/aisix ref to build (commit / tag / branch)"
         required: false
-        default: "51e0883ecf27ad641612408ac02706ec84120fec"
+        default: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
   push:
     branches: [main]
     tags: ["v*"]
@@ -24,7 +24,7 @@ env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/evlon/aisix-console
   # Default aisix ref used when there are no workflow inputs (tag/main pushes).
-  AISIX_REF_DEFAULT: "51e0883ecf27ad641612408ac02706ec84120fec"
+  AISIX_REF_DEFAULT: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
 
 permissions:
   contents: read

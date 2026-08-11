@@ -26,6 +26,7 @@ const kindLabels = {
   observability_exporters: () => t('dashboard.kindObsExporters'),
   rate_limit_policies: () => t('dashboard.kindRateLimitPolicies'),
   oidc_providers: () => t('dashboard.kindOidc'),
+  claim_mappings: () => t('dashboard.kindClaim'),
 };
 
 const statusMap = {

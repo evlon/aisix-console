@@ -19,6 +19,7 @@ const nav = [
   { path: '/models', key: 'app.nav.models' },
   { path: '/api-keys', key: 'app.nav.apiKeys' },
   { path: '/policies', key: 'app.nav.policies' },
+  { path: '/resources', key: 'app.nav.resources' },
   { path: '/playground', key: 'app.nav.playground' },
   { path: '/secrets', key: 'app.nav.secrets' },
   { path: '/raw', key: 'app.nav.raw' },

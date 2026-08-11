@@ -74,6 +74,7 @@ export function friendlyScope(scope) {
       observability_exporters: '可观测性导出器',
       rate_limit_policies: '限流策略',
       oidc_providers: 'OIDC Provider',
+      claim_mappings: 'Claim 映射',
     };
     const label = kindLabels[m[1]] || m[1];
     const name = m[3] || '';

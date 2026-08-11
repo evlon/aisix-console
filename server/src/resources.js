@@ -17,6 +17,7 @@ export const KINDS = [
   'observability_exporters',
   'rate_limit_policies',
   'oidc_providers',
+  'claim_mappings',
 ];
 
 // Identity field name per kind (used for list/get/upsert/remove and
@@ -33,6 +34,7 @@ export const IDENTITY_FIELD = {
   observability_exporters: 'name',
   rate_limit_policies: 'name',
   oidc_providers: 'name',
+  claim_mappings: 'name',
 };
 
 export function bootstrapTemplate() {
@@ -85,14 +87,15 @@ export function findIndex(collection, kind, identity) {
 }
 
 // Validate the document shape is the expected resources.yaml shape
-// (all KINDS arrays). Used to reject a parsed doc that is not a
-// resources document before any mutation.
+// (every PRESENT kind is an array). Newer gateway versions may add kinds
+// (e.g. claim_mappings) that an existing file predates, so a missing key is
+// tolerated — normalizeDoc fills it with [].
 export function isResourceDoc(doc) {
   return (
     doc &&
     typeof doc === 'object' &&
     !Array.isArray(doc) &&
-    KINDS.every((kind) => Array.isArray(doc[kind]))
+    KINDS.every((kind) => doc[kind] === undefined || Array.isArray(doc[kind]))
   );
 }
 
