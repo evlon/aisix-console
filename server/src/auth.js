@@ -136,12 +136,11 @@ export async function loginHandler(req, res) {
   const ip = req.socket?.remoteAddress || 'unknown';
   const record = loginFails.get(ip) || { fails: 0, lockUntil: 0 };
   if (record.lockUntil > Date.now()) {
-    const remaining = Math.ceil((record.lockUntil - Date.now()) / 60000);
-    return res.status(429).json({ error: `尝试次数过多，请 ${remaining} 分钟后再试` });
+    return res.status(429).json({ error: 'locked_out' });
   }
   const { password } = req.body ?? {};
   if (typeof password !== 'string' || !password) {
-    return res.status(400).json({ error: '请输入密码' });
+    return res.status(400).json({ error: 'missing_password' });
   }
   if (!verifyPassword(password)) {
     record.fails += 1;
@@ -150,7 +149,7 @@ export async function loginHandler(req, res) {
       record.fails = 0;
     }
     loginFails.set(ip, record);
-    return res.status(401).json({ error: '密码错误' });
+    return res.status(401).json({ error: 'invalid_password' });
   }
   loginFails.delete(ip);
   setSessionCookie(res);
@@ -169,13 +168,13 @@ export function statusHandler(req, res) {
 export async function changePasswordHandler(req, res) {
   const { current_password, new_password } = req.body ?? {};
   if (typeof current_password !== 'string' || typeof new_password !== 'string') {
-    return res.status(400).json({ error: '参数不完整' });
+    return res.status(400).json({ error: 'invalid_params' });
   }
   if (new_password.length < 6) {
-    return res.status(400).json({ error: '新密码至少 6 位' });
+    return res.status(400).json({ error: 'password_too_short' });
   }
   if (!verifyPassword(current_password)) {
-    return res.status(401).json({ error: '当前密码错误' });
+    return res.status(401).json({ error: 'wrong_current_password' });
   }
   setPassword(new_password);
   clearSessionCookie(res); // force re-login with the new password

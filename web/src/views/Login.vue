@@ -16,7 +16,8 @@ async function submit() {
   try {
     await auth.login(password.value);
   } catch (e) {
-    error.value = e.message || t('login.failed');
+    const key = `auth.errors.${e.message}`;
+    error.value = t(key) !== key ? t(key) : e.message;
   } finally {
     busy.value = false;
   }

@@ -337,8 +337,8 @@ onMounted(load);
             <td><span class="badge">{{ t('models.' + shapeKeys[detectShape(e)]) }}</span></td>
             <td class="muted">
               <template v-if="e.routing">{{ e.routing.strategy }} → {{ e.routing.targets.map((x) => x.model).join(', ') }}</template>
-              <template v-else-if="e.ensemble">{{ e.ensemble.panel.map((p) => p.model).join(', ') }} (ensemble)</template>
-              <template v-else-if="e.semantic">{{ e.semantic.routes.map((x) => x.name).join(', ') }} (semantic)</template>
+              <template v-else-if="e.ensemble">{{ e.ensemble.panel.map((p) => p.model).join(', ') }} ({{ t('models.shapeEnsemble') }})</template>
+              <template v-else-if="e.semantic">{{ e.semantic.routes.map((x) => x.name).join(', ') }} ({{ t('models.shapeSemantic') }})</template>
               <template v-else>{{ e.provider }} / {{ e.model_name }}</template>
             </td>
             <td>
@@ -455,7 +455,7 @@ onMounted(load);
                 <option value="">{{ t('models.chooseModel') }}</option>
                 <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
               </select>
-              <input v-model="p.temperature" placeholder="temp" style="width: 70px" />
+              <input v-model="p.temperature" :placeholder="t('models.tempShort')" style="width: 70px" />
               <input v-model="p.weight" :placeholder="t('models.weight')" style="width: 70px" />
               <button @click="form.ensemble.panel.splice(i, 1)">✕</button>
             </div>
@@ -535,7 +535,7 @@ onMounted(load);
             <input v-model="form.common.rpd" placeholder="rpd" />
             <input v-model="form.common.tpm" placeholder="tpm" />
             <input v-model="form.common.tpd" placeholder="tpd" />
-            <input v-model="form.common.concurrency" placeholder="concurrency" />
+            <input v-model="form.common.concurrency" :placeholder="t('models.concurrency')" />
           </div>
         </div>
         <div class="form-row">
@@ -561,7 +561,7 @@ onMounted(load);
         <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + t('save.reloadWarning') : '' }}
       </div>
     </Modal>
   </div>

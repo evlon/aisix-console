@@ -8,31 +8,31 @@ const status = useStatusStore();
 const { t } = useI18n();
 
 const stateMap = {
-  synced: { cls: 'ok', label: '已同步' },
-  degraded: { cls: 'warn', label: '降级' },
-  out_of_sync: { cls: 'err', label: '失步' },
-  empty: { cls: 'warn', label: '空' },
-  never_loaded: { cls: 'err', label: '未加载' },
+  synced: { cls: 'ok', label: () => t('dashboard.stateSynced') },
+  degraded: { cls: 'warn', label: () => t('dashboard.stateDegraded') },
+  out_of_sync: { cls: 'err', label: () => t('dashboard.stateOutOfSync') },
+  empty: { cls: 'warn', label: () => t('dashboard.stateEmpty') },
+  never_loaded: { cls: 'err', label: () => t('dashboard.stateNeverLoaded') },
 };
 
 const kindLabels = {
-  provider_keys: 'Provider Keys',
-  models: 'Models',
-  api_keys: 'API Keys',
-  guardrails: 'Guardrails',
-  mcp_servers: 'MCP Servers',
-  a2a_agents: 'A2A Agents',
-  cache_policies: 'Cache Policies',
-  observability_exporters: 'Observability Exporters',
-  rate_limit_policies: 'Rate Limit Policies',
-  oidc_providers: 'OIDC Providers',
+  provider_keys: () => t('dashboard.kindProviderKeys'),
+  models: () => t('dashboard.kindModels'),
+  api_keys: () => t('dashboard.kindApiKeys'),
+  guardrails: () => t('dashboard.kindGuardrails'),
+  mcp_servers: () => t('dashboard.kindMcpServers'),
+  a2a_agents: () => t('dashboard.kindA2a'),
+  cache_policies: () => t('dashboard.kindCachePolicies'),
+  observability_exporters: () => t('dashboard.kindObsExporters'),
+  rate_limit_policies: () => t('dashboard.kindRateLimitPolicies'),
+  oidc_providers: () => t('dashboard.kindOidc'),
 };
 
 const statusMap = {
-  healthy: { cls: 'ok', label: 'healthy' },
-  unhealthy: { cls: 'err', label: 'unhealthy' },
-  cooldown: { cls: 'warn', label: 'cooldown' },
-  not_applicable: { cls: '', label: 'n/a' },
+  healthy: { cls: 'ok', label: () => t('dashboard.healthHealthy') },
+  unhealthy: { cls: 'err', label: () => t('dashboard.healthUnhealthy') },
+  cooldown: { cls: 'warn', label: () => t('dashboard.healthCooldown') },
+  not_applicable: { cls: '', label: () => t('dashboard.healthNa') },
 };
 
 async function bootstrap() {
@@ -72,7 +72,7 @@ async function bootstrap() {
             <td style="width: 200px" class="muted">{{ t('dashboard.configState') }}</td>
             <td>
               <span v-if="status.configState" class="badge" :class="stateMap[status.configState]?.cls">
-                {{ stateMap[status.configState]?.label }}
+                {{ stateMap[status.configState]?.label() }}
               </span>
               <span v-else class="muted">—</span>
             </td>
@@ -145,7 +145,7 @@ async function bootstrap() {
             <td>{{ m.display_name }}</td>
             <td>{{ m.kind }}</td>
             <td>
-              <span class="badge" :class="statusMap[m.status]?.cls">{{ statusMap[m.status]?.label || m.status }}</span>
+              <span class="badge" :class="statusMap[m.status]?.cls">{{ statusMap[m.status]?.label() || m.status }}</span>
             </td>
             <td class="muted">{{ m.status_reason || m.last_check_status || '—' }}</td>
           </tr>
@@ -157,7 +157,7 @@ async function bootstrap() {
       <h3 style="margin-top: 0">{{ t('dashboard.resourceCounts') }}</h3>
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px">
         <div v-for="(label, kind) in kindLabels" :key="kind">
-          <span class="muted">{{ label }}:</span> {{ status.counts[kind] ?? 0 }}
+          <span class="muted">{{ label() }}:</span> {{ status.counts[kind] ?? 0 }}
         </div>
       </div>
     </div>

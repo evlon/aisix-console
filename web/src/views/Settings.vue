@@ -32,7 +32,8 @@ async function submit() {
     next.value = '';
     confirm.value = '';
   } catch (e) {
-    error.value = e.message || t('settings.changeFailed');
+    const key = `auth.errors.${e.message}`;
+    error.value = t(key) !== key ? t(key) : e.message;
   } finally {
     busy.value = false;
   }

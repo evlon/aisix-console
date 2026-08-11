@@ -407,7 +407,7 @@ onMounted(load);
         </button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + t('save.reloadWarning') : '' }}
       </div>
     </Modal>
   </div>

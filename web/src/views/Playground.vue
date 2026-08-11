@@ -94,7 +94,7 @@ async function send() {
       messages.value.push({ role: 'assistant', content: output.value });
     }
   } catch (e) {
-    error.value = `request failed: ${e.message}`;
+    error.value = t('playground.requestFailed', { msg: e.message });
   } finally {
     running.value = false;
   }
@@ -126,7 +126,7 @@ onMounted(loadModels);
         </div>
         <div>
           <label class="muted" style="display: block; margin-bottom: 4px">{{ t('playground.temperature') }}</label>
-          <input v-model="temperature" type="number" step="0.1" placeholder="default" style="width: 100%" />
+          <input v-model="temperature" type="number" step="0.1" :placeholder="t('playground.temperaturePlaceholder')" style="width: 100%" />
         </div>
         <div style="display: flex; align-items: flex-end; gap: 8px">
           <label style="display: flex; align-items: center; gap: 6px">

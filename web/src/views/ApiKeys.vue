@@ -223,7 +223,7 @@ onMounted(load);
             </div>
           </div>
           <div class="form-row" v-if="form.mode === 'import'">
-            <label>Plaintext key</label>
+            <label>{{ t('apiKeys.importKeyLabel') }}</label>
             <input v-model="form.importPlaintext" type="password" :placeholder="t('apiKeys.importPlaceholder')" style="width: 100%" />
           </div>
           <div class="form-row" v-if="form.mode === 'envref'">
@@ -264,7 +264,7 @@ onMounted(load);
           <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
         </div>
         <div v-if="lastResult && lastResult.ok && !generatedPlaintext" class="badge ok" style="margin-top: 10px">
-          {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
+          {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + t('save.reloadWarning') : '' }}
         </div>
       </template>
     </Modal>
