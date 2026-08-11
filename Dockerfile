@@ -25,13 +25,10 @@ RUN npm run build -w web
 # --- Runtime -------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
 # Gateway binary, built by CI (or provided locally in the build context).
-COPY aisix-bin/aisix /usr/local/bin/aisix
-RUN chmod +x /usr/local/bin/aisix
+COPY --chmod=755 aisix-bin/aisix /usr/local/bin/aisix
 # Supervisor entrypoint (gateway + console) and the reload helper.
-COPY docker/entrypoint.sh /usr/local/bin/aisix-console-entrypoint
-RUN chmod +x /usr/local/bin/aisix-console-entrypoint
-COPY docker/gw-hup.sh /usr/local/bin/gw-hup.sh
-RUN chmod +x /usr/local/bin/gw-hup.sh
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/aisix-console-entrypoint
+COPY --chmod=755 docker/gw-hup.sh /usr/local/bin/gw-hup.sh
 
 WORKDIR /app
 COPY package.json package-lock.json ./

@@ -1,0 +1,43 @@
+# AISIX Console + Gateway — single :80 exposure via Caddy
+#
+# Usage: drop this site block into your main Caddyfile (e.g.
+# /etc/caddy/Caddyfile), OR save it as /etc/caddy/aisix.caddy and add
+# `import /etc/caddy/aisix.caddy` to the main file. Then `caddy validate`
+# and `systemctl reload caddy`.
+#
+# Prerequisites:
+#   - The aisix container must publish its ports to the HOST. This config
+#     targets the HOST-mapped ports currently used on the deploy VM
+#     (check with `docker port aisix`):
+#         console  (UI + /api)        : 8400   (container :8787)
+#         gateway   (/v1 /mcp /a2a)   : 8480   (container :3000)
+#     If you recreate the container with AISIX_CONSOLE_PORT / AISIX_PROXY_PORT,
+#     update the two `localhost:<port>` targets below to match.
+#   - admin (:3002) and metrics (:9090) are reached internally by the console
+#     (same PID/network namespace) and are intentionally NOT exposed publicly.
+#
+# DNS: point aisix.yiq.pub (or your chosen name) at this host's public IP.
+
+http://aisix.yiq.pub {
+    encode gzip
+
+    # OpenAI-compatible + MCP + A2A surface → gateway proxy (8480)
+    handle /v1/* {
+        reverse_proxy localhost:8480 {
+            transport http {
+                response_header_timeout 30m
+            }
+        }
+    }
+    handle /mcp/* {
+        reverse_proxy localhost:8480
+    }
+    handle /a2a/* {
+        reverse_proxy localhost:8480
+    }
+
+    # Everything else (SPA + console /api) → console server (8400)
+    handle {
+        reverse_proxy localhost:8400
+    }
+}
