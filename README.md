@@ -1,21 +1,43 @@
 # AISIX Console
 
-个人使用的 AISIX AI Gateway（文件模式）Web 配置控制台。独立 git 项目，**不修改 aisix 源码**。
+个人使用的 AISIX AI Gateway（文件模式）Web 配置控制台。独立 git 项目，**不修改 aisix 源码**。Apache-2.0 开源。
 
 ## 功能
 
-- 管理 **Provider Keys / 模型 / 调用方 API Keys / 策略（限流·缓存·护栏）**，直接读写网关的 `resources.yaml`
-- 每次保存都经过 **`aisix validate --resources`** 校验（与网关加载管线完全一致），出错时给出逐条中文错误、文件保持不变
+- **密码登录**：整个控制台（所有页面 + API）都需要登录，默认密码 `aisix`（可在「设置」改密），避免暴露
+- **中英双语**：侧边栏一键切换「中文 / EN」，选择记住在本地
+- 管理 **上游密钥 / 模型 / 调用方密钥 / 策略（限流·缓存·护栏）**，直接读写网关的 `resources.yaml`
+- 每次保存都经过 **`aisix validate --resources`** 校验（与网关加载管线完全一致），出错时逐条提示、文件保持不变
 - **状态看板**：`/status/config`（synced/rejected/partial-compat）+ `/status/models` 模型健康 + 资源数量
 - **试玩页**：SSE 流式对话，真实转发到网关代理
-- **密钥库**：Provider Key / key_env 明文只存 `secrets.env`，resources.yaml 里只写 `${VAR}`；调用方 key 在浏览器生成并 SHA-256，明文只显示一次
-- 保存后执行可配置的 `reloadCommand`（如 `docker kill -s HUP aisix`），留空则提示手动重载
+- **密钥库**：上游密钥 / key_env 明文只存 `secrets.env`，resources.yaml 只写 `${CONSOLE_PK_xxx}`；调用方密钥在浏览器生成并 SHA-256，明文只显示一次
+- 保存后执行可配置的 `reloadCommand`（如 `podman kill -s HUP aisix-gw`），留空则提示手动重载
 
 ## 技术栈
 
-Node.js（Express）后端 + Vue 3 / Vite 前端，npm workspaces 单仓库，生产模式后端托管构建产物。
+Node.js（Express）后端 + Vue 3 / Vite 前端（vue-i18n 双语），npm workspaces 单仓库，生产模式后端托管构建产物。
 
-## 安装与运行
+## 部署方式一：容器部署（推荐）
+
+网关跑官方镜像 `ghcr.io/api7/aisix:0.8.1`，控制台由本仓库 `Dockerfile` 构建（镜像内自带网关二进制用于 validate）。详见 **[deploy/README.md](deploy/README.md)**。
+
+```bash
+export PATH="$PATH:/c/Users/niukl/AppData/Local/Programs/Podman"   # Windows
+podman machine start                       # 若机器没启动
+podman pull ghcr.io/api7/aisix:0.8.1
+podman build --network=host -t aisix-console:dev .    # 构建需 --network=host（见 deploy/README）
+bash deploy/podman-run.sh                  # 幂等：创建/重建 aisix-gw + aisix-console
+# 打开 http://localhost:8787  →  登录（默认 aisix）
+```
+
+- 网关端口：代理 `:3000`、admin `:3002`（3001 被 Tabby 占用）、metrics `:9090`
+- 保存配置后热重载：`podman kill -s HUP aisix-gw`
+- `deploy/` 目录挂载进两个容器共享 `resources.yaml`；`auth.json`、`secrets.env` 都持久化在 `deploy/`
+- 密钥注入：`deploy/podman-run.sh` 会自动给网关容器加 `--env-file deploy/secrets.env`
+
+也可在 GitHub Actions 上编译 Linux 版网关二进制并发布 Release（工作流见 `.github/workflows/build-aisix.yml`，推送 `v*` tag 触发）。
+
+## 部署方式二：本地 Node 开发/运行
 
 要求：Node 20+；`aisix` 二进制（用于 validate，在 `../aisix/target/debug/aisix` 或自行配置）。
 
@@ -39,31 +61,44 @@ npm start
 # 打开 http://127.0.0.1:8787
 ```
 
+## 登录认证
+
+- 首次启动自动创建 `auth.json`（含密码哈希 + 随机会话密钥），默认密码 **`aisix`**；可用 env `AISIX_CONSOLE_DEFAULT_PASSWORD` 覆盖首次密码
+- 登录后在「设置」页修改密码；改密后需重新登录
+- 会话为签名 Cookie（HttpOnly、SameSite=Strict、7 天），重启容器/服务后登录态保持
+- 登录限流：5 次失败锁定 15 分钟
+- `auth.json` 已 gitignore，只存 scrypt 哈希，绝不明文存密码
+
 ## 配置（aisix-console.yaml）
 
 | 字段 | 说明 |
 |---|---|
 | `resourcesFile` | 网关的 resources.yaml 路径 |
 | `aisixBin` | aisix 二进制路径（保存时校验用） |
+| `secretsFile` | 密钥库 secrets.env 路径 |
+| `authFile` | 登录认证文件 auth.json 路径（首次启动自动创建） |
 | `gateway.proxy/admin/metrics` | 网关三个监听地址 |
 | `gateway.adminKey` | 可选，Admin API key（状态页 /health 用） |
-| `reloadCommand` | 保存后重载命令；Windows 原生无 SIGHUP，留空手动重启 |
+| `reloadCommand` | 保存后重载命令；留空则提示手动重载 |
 
-环境变量覆盖：`AISIX_CONSOLE_PORT`、`AISIX_CONSOLE_RESOURCES_FILE`、`AISIX_CONSOLE_AISIX_BIN`、`AISIX_CONSOLE_RELOAD_COMMAND`、`AISIX_CONSOLE_CONFIG`。
+环境变量覆盖：`AISIX_CONSOLE_PORT`、`AISIX_CONSOLE_BIND`、`AISIX_CONSOLE_RESOURCES_FILE`、`AISIX_CONSOLE_AISIX_BIN`、`AISIX_CONSOLE_AUTH_FILE`、`AISIX_CONSOLE_RELOAD_COMMAND`、`AISIX_CONSOLE_CONFIG`、`AISIX_CONSOLE_DEFAULT_PASSWORD`。
 
 ## 密钥接线（重要）
 
-控制台把 Provider Key 明文存在 `secrets.env`，resources.yaml 只写 `${CONSOLE_PK_xxx}`。
-要让网关真正使用，需要把 `secrets.env` 注入网关进程环境：
+控制台把上游密钥明文存在 `secrets.env`，resources.yaml 只写 `${CONSOLE_PK_xxx}`。要让网关使用：
 
-- **Docker**：`docker run --env-file ./secrets.env ...`（或 `-e VAR=...`）
+- **容器部署**：`deploy/podman-run.sh` 已自动给网关容器注入 `secrets.env`（`--env-file`）
+- **Docker**：`docker run --env-file ./secrets.env ...`
 - **systemd**：`EnvironmentFile=/path/to/secrets.env`
 - **手动**：`set -a; . secrets.env; set +a` 后再启动 aisix
+
+⚠️ **密钥变量名不能以 `AISIX_` 开头**：aisix 网关会把所有 `AISIX_*` 环境变量当作配置覆盖（`unknown field ...` 直接启动失败）。控制台统一使用 `CONSOLE_PK_` / `CONSOLE_CK_` 前缀。
 
 ## 重载
 
 保存配置后，`aisix validate` 通过即写文件并执行 `reloadCommand`：
 
+- 容器（Linux）：`podman kill -s HUP aisix-gw`
 - Docker (Linux)：`docker kill -s HUP aisix`
 - systemd：`systemctl reload aisix`
 - Linux 原生：`kill -HUP <pid>`
@@ -74,14 +109,18 @@ npm start
 ```
 server/          Node.js 后端（Express）
   src/config.js        控制台配置加载
+  src/auth.js          密码登录 + 签名 Cookie 会话 + 限流
   src/resources.js     resources.yaml 文档模型（糖语法无损往返）
   src/secrets.js       secrets.env 密钥库
   src/validate.js      aisix validate 封装 + 错误解析
   src/savePipeline.js  保存管线：序列化→临时文件→校验→原子替换→reload
-  src/routes/          resources / status / secrets / playground
+  src/routes/          auth / resources / status / secrets / playground
 web/             Vue 3 前端
-  src/views/           Dashboard · ProviderKeys · Models · ApiKeys · Policies · Playground · Secrets · RawYaml
-  src/lib/             keygen + sha256（浏览器端生成/哈希调用方 key）
+  src/i18n/           中英语言包（zh-CN / en）
+  src/stores/         status（网关轮询）+ auth（登录态）
+  src/views/          Login · Settings · Dashboard · ProviderKeys · Models · ApiKeys · Policies · Playground · Secrets · RawYaml
+  src/lib/            keygen + sha256（浏览器端生成/哈希调用方密钥）
+deploy/          容器部署：Dockerfile、podman-run.sh、config/resources 模板、README
 ```
 
 ## 注意
@@ -89,3 +128,4 @@ web/             Vue 3 前端
 - 本控制台以**文件模式**为前提：`resources_file` 指向 resources.yaml，网关不以 etcd 运行；Admin 写接口在文件模式下是 409，控制台不使用它，改走文件 + validate
 - 保存时 `yaml` 包序列化会丢失文件中的注释（文档化取舍）
 - 网关离线不影响配置管理（validate 不依赖运行中的网关）
+- 默认只绑定 `127.0.0.1`；若暴露到局域网，建议在前面加 HTTPS（登录密码走明文 HTTP）

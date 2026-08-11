@@ -10,7 +10,9 @@ resourcesFile: "../aisix/resources.yaml"
 # aisix 二进制路径（用于 `aisix validate --resources` 校验）
 aisixBin: "../aisix/target/debug/aisix"
 
-# 控制台密钥库（Provider Key / key_env 明文只存在这里，gitignore 掉）
+# 控制台密钥库（Provider Key / key_env 明文只存在这里，gitignore 掉）。
+# 密钥变量名统一用 CONSOLE_PK_ / CONSOLE_CK_ 前缀——不能以 AISIX_ 开头，
+# 否则 aisix 网关会把它当作配置覆盖导致启动失败。
 secretsFile: "./secrets.env"
 
 # 登录认证文件（密码哈希 + 会话密钥）。首次启动自动创建，默认密码 aisix，
@@ -30,6 +32,3 @@ gateway:
 #   Linux 原生:        kill -HUP <pid>
 #   Windows 原生:      无 SIGHUP，留空，改配置后需重启网关
 reloadCommand: ""
-
-# 可选：如果把控制台暴露到非本机，建议设置一个 Bearer token 保护 API
-# consoleToken: "change-me"
