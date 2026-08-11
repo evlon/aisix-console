@@ -164,6 +164,9 @@ export default {
     defaultTarget: '默认目标',
     timeoutMs: '超时 (ms)',
     streamTimeoutMs: '流式超时 (ms)',
+    useRecommended: '推荐',
+    timeoutHint:
+      '推荐 {rec}ms 请求 / {stream}ms 流式首包（路由/回退需短超时，上游挂起可快速切换）。留空 = 网关默认 100 分钟，路由/回退会被拖慢。',
     retry: '重试',
     rateLimit: '限流（留空不设）',
     rlRps: '每秒请求',

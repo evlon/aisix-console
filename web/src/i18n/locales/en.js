@@ -163,6 +163,9 @@ export default {
     defaultTarget: 'Default target',
     timeoutMs: 'Timeout (ms)',
     streamTimeoutMs: 'Stream timeout (ms)',
+    useRecommended: 'Recommended',
+    timeoutHint:
+      'Recommended {rec}ms request / {stream}ms first stream chunk (routing/failover needs a short timeout so a hung upstream falls back fast). Empty = gateway default 100 minutes, which slows failover.',
     retry: 'Retries',
     rateLimit: 'Rate limit (leave empty to skip)',
     rlRps: 'reqs/sec',

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
@@ -64,6 +64,34 @@ const shapeLabels = {
 };
 const shapeKeys = { direct: 'shapeDirect', routing: 'shapeRouting', ensemble: 'shapeEnsemble', semantic: 'shapeSemantic' };
 
+// Recommended upstream timeouts (ms) per model shape. Routing/failover needs a
+// SHORT request timeout so a hung upstream falls back quickly instead of
+// blocking on the gateway default (100 minutes); other shapes get a normal
+// LLM-generation budget.
+const RECOMMENDED_TIMEOUTS = {
+  direct: { timeout: 120000, stream: 60000 },
+  routing: { timeout: 30000, stream: 20000 },
+  ensemble: { timeout: 120000, stream: 60000 },
+  semantic: { timeout: 120000, stream: 60000 },
+};
+const recTimeouts = computed(() => RECOMMENDED_TIMEOUTS[form.value.shape] ?? RECOMMENDED_TIMEOUTS.direct);
+
+function fillRecommendedTimeouts() {
+  form.value.common.timeout = recTimeouts.value.timeout;
+  form.value.common.stream_timeout = recTimeouts.value.stream;
+}
+
+// Pre-fill recommended timeouts when the shape changes and the fields are
+// still empty (never clobber a value the user already typed).
+watch(
+  () => form.value.shape,
+  () => {
+    if (form.value.common.timeout === '' && form.value.common.stream_timeout === '') {
+      fillRecommendedTimeouts();
+    }
+  },
+);
+
 async function load() {
   loading.value = true;
   try {
@@ -87,6 +115,7 @@ function detectShape(e) {
 
 function openCreate() {
   form.value = emptyForm();
+  fillRecommendedTimeouts(); // pre-fill the direct-shape recommended values
   editing.value = {};
   lastResult.value = null;
   tab.value = 'form';
@@ -516,11 +545,24 @@ onMounted(load);
         <hr style="border-color: var(--border); margin: 14px 0" />
         <div class="form-row">
           <label>{{ t('models.timeoutMs') }}</label>
-          <input v-model="form.common.timeout" type="number" />
+          <div style="display: flex; gap: 6px; align-items: center">
+            <input
+              v-model="form.common.timeout"
+              type="number"
+              :placeholder="String(recTimeouts.timeout)"
+              style="flex: 1"
+            />
+            <button class="ghost" style="white-space: nowrap" @click="fillRecommendedTimeouts">
+              {{ t('models.useRecommended') }}
+            </button>
+          </div>
         </div>
         <div class="form-row">
           <label>{{ t('models.streamTimeoutMs') }}</label>
-          <input v-model="form.common.stream_timeout" type="number" />
+          <input v-model="form.common.stream_timeout" type="number" :placeholder="String(recTimeouts.stream)" />
+        </div>
+        <div class="muted" style="font-size: 12px; margin-bottom: 8px">
+          {{ t('models.timeoutHint', { rec: recTimeouts.timeout, stream: recTimeouts.stream }) }}
         </div>
         <div class="form-row">
           <label>{{ t('models.retry') }}</label>
