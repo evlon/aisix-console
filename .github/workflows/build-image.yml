@@ -34,17 +34,25 @@ jobs:
   build-gateway:
     name: build aisix (linux x86_64, release)
     runs-on: ubuntu-latest
+    # Build inside debian:bookworm so the binary links glibc 2.36 — the same
+    # glibc the runtime base `node:22-bookworm-slim` ships. Building on the
+    # default ubuntu-latest runner links glibc 2.38/2.39, which the slim
+    # runtime lacks, so the gateway fails to exec ("GLIBC_2.38 not found").
+    container:
+      image: debian:bookworm
     steps:
+      - name: install build deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential pkg-config \
+            protobuf-compiler libssl-dev
+
       - uses: actions/checkout@v4
         with:
           repository: evlon/aisix
           ref: ${{ inputs.aisix_ref || env.AISIX_REF_DEFAULT }}
           path: aisix
-
-      - name: install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
 
       - uses: dtolnay/rust-toolchain@stable
 
