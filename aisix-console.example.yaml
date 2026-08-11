@@ -1,0 +1,31 @@
+# AISIX Console 配置示例 —— 复制为 aisix-console.yaml 后修改
+
+# 控制台监听地址（个人使用默认仅本机）
+port: 8787
+bind: "127.0.0.1"
+
+# 网关的 resources.yaml 路径（文件模式）
+resourcesFile: "../aisix/resources.yaml"
+
+# aisix 二进制路径（用于 `aisix validate --resources` 校验）
+aisixBin: "../aisix/target/debug/aisix"
+
+# 控制台密钥库（Provider Key / key_env 明文只存在这里，gitignore 掉）
+secretsFile: "./secrets.env"
+
+gateway:
+  proxy: "http://127.0.0.1:3000"     # 代理监听（试玩页转发目标）
+  admin: "http://127.0.0.1:3001"     # Admin 监听（读状态用）
+  metrics: "http://127.0.0.1:9090"   # Metrics/status 监听（状态看板）
+  adminKey: ""                       # 可选：admin_keys 中的某个 key，用于 /admin/v1/health
+
+# 保存成功后执行的重载命令。为空 = 手动重启/重载网关。
+# 例子：
+#   Docker (Linux):   docker kill -s HUP aisix
+#   systemd:          systemctl reload aisix
+#   Linux 原生:        kill -HUP <pid>
+#   Windows 原生:      无 SIGHUP，留空，改配置后需重启网关
+reloadCommand: ""
+
+# 可选：如果把控制台暴露到非本机，建议设置一个 Bearer token 保护 API
+# consoleToken: "change-me"

@@ -1,0 +1,236 @@
+/* Global styles for AISIX Console */
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f1117;
+  --panel: #171a23;
+  --border: #2a2f3a;
+  --text: #e6e8ee;
+  --muted: #9aa3b2;
+  --accent: #3b82f6;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+input,
+select,
+textarea {
+  background: #0d0f15;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  background: #232839;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover {
+  background: #2b3247;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover {
+  background: #2f6fe0;
+}
+
+button.danger {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+button.danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge.ok {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.badge.warn {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.badge.err {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.error-box {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--red);
+  color: #fca5a5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.warn-box {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--amber);
+  color: #fcd34d;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.toast-wrap {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: #1c2230;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  padding: 10px 14px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  max-width: 380px;
+  white-space: pre-wrap;
+}
+
+.toast.success {
+  border-left-color: var(--green);
+}
+
+.toast.error {
+  border-left-color: var(--red);
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.form-row label {
+  color: var(--muted);
+  text-align: right;
+  font-size: 13px;
+}
+
+.form-row.full {
+  grid-template-columns: 1fr;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+code {
+  background: #0d0f15;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+}

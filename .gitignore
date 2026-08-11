@@ -1,0 +1,7 @@
+node_modules/
+web/dist/
+secrets.env
+resources.yaml
+*.tmp
+aisix-console.yaml
+.DS_Store
