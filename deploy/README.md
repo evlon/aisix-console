@@ -67,6 +67,12 @@ Windows (localhost, mirrored WSL networking)
   save, run `podman kill -s HUP aisix-gw`, or set `reloadCommand` in
   `deploy/aisix-console.yaml` to a command that can (e.g. a helper that calls
   the Podman REST API over a mounted socket).
+- **New secrets need a container recreate**: `--env-file` is snapshotted at
+  container creation. When you add a NEW provider key in the console (a new
+  `${CONSOLE_PK_*}` var), SIGHUP alone won't work — the gateway can't resolve
+  the new var and stays `out_of_sync`. Recreate the gateway:
+  `bash deploy/podman-run.sh`. Only edits that don't introduce new secrets
+  can be applied with SIGHUP.
 
 ## Notes / gotchas (this machine)
 
