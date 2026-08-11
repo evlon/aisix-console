@@ -1,0 +1,93 @@
+# Builds the AISIX AI Gateway (api7/aisix) for Linux x86_64 on GitHub runners
+# and publishes the binary, so it can be deployed into WSL without needing a
+# local Rust/C toolchain.
+#
+# Why this exists: the console manages a file-mode gateway. The gateway itself
+# is built upstream; this workflow produces the Linux binary we deploy into
+# WSL. GitHub runners carry gcc/cmake/protoc, which the local WSL lacks.
+#
+# Usage:
+#   1. Push this repo to GitHub (the console repo does not contain secrets —
+#      a public repo lets you `curl` the release asset without auth).
+#   2. Actions → build aisix (linux) + release → Run workflow.
+#      - aisix_ref:            commit/tag/branch of api7/aisix to build
+#                              (default pins the commit this console was tested against)
+#      - publish_release:      true → also create a GitHub Release with the binary
+#   3. Download the binary and drop it into WSL (see deploy/README).
+#
+# Pushing a `v*` tag also builds a release binary and publishes a Release.
+
+name: build aisix (linux) + release
+
+on:
+  workflow_dispatch:
+    inputs:
+      aisix_ref:
+        description: "api7/aisix ref to build (commit / tag / branch)"
+        required: false
+        default: "51e0883ecf27ad641612408ac02706ec84120fec"
+      publish_release:
+        description: "Publish a GitHub Release with the debug binary?"
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: build aisix (linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: api7/aisix
+          ref: ${{ inputs.aisix_ref || github.ref_name }}
+          path: aisix
+
+      - name: install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: aisix
+
+      - name: build (debug)
+        working-directory: aisix
+        run: cargo build -p aisix-server --bin aisix
+
+      - name: upload debug binary (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aisix-linux-x86_64-debug
+          path: aisix/target/debug/aisix
+          if-no-files-found: error
+
+      # Release binaries use the repo's release profile (thin LTO, cgu=1) —
+      # slower to build, smaller/faster at runtime. Built on tag pushes.
+      - name: build (release)
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: aisix
+        run: cargo build --release -p aisix-server --bin aisix
+
+      - name: publish release (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: aisix/target/release/aisix
+
+      - name: publish release (manual)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          name: aisix-linux-${{ inputs.aisix_ref || 'main' }}
+          tag_name: build-${{ inputs.aisix_ref || 'main' }}
+          files: aisix/target/debug/aisix
