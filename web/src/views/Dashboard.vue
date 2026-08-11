@@ -36,6 +36,16 @@ const statusMap = {
   not_applicable: { cls: '', label: () => t('dashboard.healthNa') },
 };
 
+// The gateway reports timestamps as UTC ISO; render them in the browser's
+// local time so "last reload" / "applied at" match what the user just did.
+function fmtLocal(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 async function bootstrap() {
   if (!confirm(t('dashboard.fileMissing') + '\n\n' + t('common.confirm') + '?')) return;
   try {
@@ -83,7 +93,7 @@ async function bootstrap() {
             <td>
               <template v-if="status.config?.last_reload">
                 {{ status.config.last_reload.successful ? t('dashboard.success') : t('dashboard.failed') }}
-                <span class="muted">@ {{ status.config.last_reload.at || '' }}</span>
+                <span class="muted">@ {{ fmtLocal(status.config.last_reload.at) }}</span>
               </template>
               <span v-else class="muted">—</span>
             </td>
@@ -94,7 +104,7 @@ async function bootstrap() {
           </tr>
           <tr>
             <td class="muted">{{ t('dashboard.appliedAt') }}</td>
-            <td>{{ status.config?.applied?.applied_at || '—' }}</td>
+            <td>{{ fmtLocal(status.config?.applied?.applied_at) }}</td>
           </tr>
         </tbody>
       </table>
