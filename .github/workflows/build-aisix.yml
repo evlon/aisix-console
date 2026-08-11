@@ -46,7 +46,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: api7/aisix
-          ref: ${{ inputs.aisix_ref || github.ref_name }}
+          # Default pins the commit this console was tested against; a tag
+          # push has no `inputs`, so fall back to the same pin, never to the
+          # console repo's own tag name (api7/aisix has no such ref).
+          ref: ${{ inputs.aisix_ref || '51e0883ecf27ad641612408ac02706ec84120fec' }}
           path: aisix
 
       - name: install protoc
