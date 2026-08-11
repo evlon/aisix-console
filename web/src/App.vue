@@ -1,23 +1,37 @@
 <script setup>
 import { onMounted, onUnmounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { useStatusStore } from './stores/status.js';
 import Toast from './components/Toast.vue';
 
 const router = useRouter();
 const status = useStatusStore();
+const { t } = useI18n();
 const toastEl = useTemplateRef('toast');
 
 const nav = [
-  { path: '/', label: '仪表盘' },
-  { path: '/provider-keys', label: 'Provider Keys' },
-  { path: '/models', label: '模型' },
-  { path: '/api-keys', label: 'API Keys' },
-  { path: '/policies', label: '策略' },
-  { path: '/playground', label: '试玩' },
-  { path: '/secrets', label: '密钥' },
-  { path: '/raw', label: '原始 YAML' },
+  { path: '/', key: 'app.nav.dashboard' },
+  { path: '/provider-keys', key: 'app.nav.providerKeys' },
+  { path: '/models', key: 'app.nav.models' },
+  { path: '/api-keys', key: 'app.nav.apiKeys' },
+  { path: '/policies', key: 'app.nav.policies' },
+  { path: '/playground', key: 'app.nav.playground' },
+  { path: '/secrets', key: 'app.nav.secrets' },
+  { path: '/raw', key: 'app.nav.raw' },
 ];
+
+const stateClass = (s) =>
+  ({ synced: 'ok', degraded: 'warn', out_of_sync: 'err', empty: 'warn', never_loaded: 'err' }[s] || '');
+
+const stateLabel = (s) =>
+  ({
+    synced: 'synced',
+    degraded: 'degraded',
+    out_of_sync: 'out of sync',
+    empty: 'empty',
+    never_loaded: 'not loaded',
+  }[s] || s);
 
 onMounted(() => status.startPolling());
 onUnmounted(() => status.stopPolling());
@@ -37,53 +51,50 @@ onUnmounted(() => status.stopPolling());
           class="nav-link"
           :class="{ active: router.currentRoute.value.path === item.path }"
         >
-          {{ item.label }}
+          {{ t(item.key) }}
         </router-link>
       </nav>
       <div style="margin-top: 24px; font-size: 12px" class="muted">
         <div>
-          网关状态：
-          <span v-if="status.loading && !status.data" class="muted">检测中…</span>
-          <span v-else-if="status.gatewayReachable" class="badge ok">在线</span>
-          <span v-else class="badge err">离线</span>
+          {{ t('app.gatewayStatus') }}：
+          <span v-if="status.loading && !status.data" class="muted">{{ t('app.checking') }}</span>
+          <span v-else-if="status.gatewayReachable" class="badge ok">{{ t('app.online') }}</span>
+          <span v-else class="badge err">{{ t('app.offline') }}</span>
         </div>
         <div style="margin-top: 6px">
-          配置：
+          {{ t('app.configState') }}：
           <span v-if="status.configState" class="badge" :class="stateClass(status.configState)">
             {{ stateLabel(status.configState) }}
           </span>
           <span v-else class="muted">—</span>
         </div>
       </div>
+      <div style="margin-top: 16px">
+        <button
+          class="lang-toggle"
+          :class="{ active: $i18n.locale === 'zh-CN' }"
+          @click="$i18n.locale = 'zh-CN'; localStorage.setItem('aisix_console_lang', 'zh-CN')"
+        >
+          中文
+        </button>
+        <button
+          class="lang-toggle"
+          :class="{ active: $i18n.locale === 'en' }"
+          @click="$i18n.locale = 'en'; localStorage.setItem('aisix_console_lang', 'en')"
+        >
+          EN
+        </button>
+      </div>
     </aside>
 
     <main style="flex: 1; padding: 20px 28px; overflow: auto">
-      <h1 style="margin-top: 0; font-size: 20px">{{ router.currentRoute.value.meta.title || 'AISIX Console' }}</h1>
+      <h1 style="margin-top: 0; font-size: 20px">{{ t(router.currentRoute.value.meta.titleKey || 'app.title') }}</h1>
       <router-view />
     </main>
 
     <Toast ref="toast" />
   </div>
 </template>
-
-<script>
-export default {
-  methods: {
-    stateClass(s) {
-      return { synced: 'ok', degraded: 'warn', out_of_sync: 'err', empty: 'warn', never_loaded: 'err' }[s] || '';
-    },
-    stateLabel(s) {
-      return {
-        synced: '已同步',
-        degraded: '降级',
-        out_of_sync: '失步',
-        empty: '空',
-        never_loaded: '未加载',
-      }[s] || s;
-    },
-  },
-};
-</script>
 
 <style scoped>
 .nav-link {
@@ -101,5 +112,17 @@ export default {
 .nav-link.active {
   background: #232b3d;
   color: var(--text);
+}
+
+.lang-toggle {
+  padding: 3px 10px;
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+.lang-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 </style>

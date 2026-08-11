@@ -1,9 +1,11 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { useStatusStore } from '../stores/status.js';
 import { api } from '../api.js';
 import { ref } from 'vue';
 
 const status = useStatusStore();
+const { t } = useI18n();
 
 const stateMap = {
   synced: { cls: 'ok', label: '已同步' },
@@ -15,33 +17,33 @@ const stateMap = {
 
 const kindLabels = {
   provider_keys: 'Provider Keys',
-  models: '模型',
+  models: 'Models',
   api_keys: 'API Keys',
-  guardrails: '护栏',
-  mcp_servers: 'MCP 服务器',
+  guardrails: 'Guardrails',
+  mcp_servers: 'MCP Servers',
   a2a_agents: 'A2A Agents',
-  cache_policies: '缓存策略',
-  observability_exporters: '观测导出器',
-  rate_limit_policies: '限流策略',
-  oidc_providers: 'OIDC',
+  cache_policies: 'Cache Policies',
+  observability_exporters: 'Observability Exporters',
+  rate_limit_policies: 'Rate Limit Policies',
+  oidc_providers: 'OIDC Providers',
 };
 
 const statusMap = {
-  healthy: { cls: 'ok', label: '健康' },
-  unhealthy: { cls: 'err', label: '不健康' },
-  cooldown: { cls: 'warn', label: '冷却中' },
-  not_applicable: { cls: '', label: '不适用' },
+  healthy: { cls: 'ok', label: 'healthy' },
+  unhealthy: { cls: 'err', label: 'unhealthy' },
+  cooldown: { cls: 'warn', label: 'cooldown' },
+  not_applicable: { cls: '', label: 'n/a' },
 };
 
 async function bootstrap() {
-  if (!confirm('文件缺失或损坏。要用空模板覆盖创建 resources.yaml 吗？（将丢失现有文件）')) return;
+  if (!confirm(t('dashboard.fileMissing') + '\n\n' + t('common.confirm') + '?')) return;
   try {
     const r = await api.bootstrap();
     if (r.ok) {
-      alert('已创建空模板，请到各页面添加资源');
+      alert(t('dashboard.createTemplate') + ' ✓');
       status.refresh();
     } else {
-      alert(`创建失败:\n${r.errors.map((e) => `- ${e.message}`).join('\n')}`);
+      alert(r.errors.map((e) => `- ${e.message}`).join('\n'));
     }
   } catch (e) {
     alert(e.message);
@@ -52,22 +54,22 @@ async function bootstrap() {
 <template>
   <div>
     <div v-if="!status.fileExists" class="warn-box">
-      resources.yaml 不存在。请先「创建空模板」，然后在各页面添加配置。
-      <button class="primary" style="margin-left: 8px" @click="bootstrap">创建空模板</button>
+      {{ t('dashboard.fileMissing') }}
+      <button class="primary" style="margin-left: 8px" @click="bootstrap">{{ t('dashboard.createTemplate') }}</button>
     </div>
     <div v-else-if="!status.fileOk" class="error-box">
-      配置文件解析失败：{{ status.fileError }}。请到「原始 YAML」页修复。
+      {{ t('dashboard.fileBroken', { error: status.fileError }) }}
     </div>
     <div v-if="!status.gatewayReachable" class="warn-box">
-      网关（metrics :9090）不可达——状态数据不可用；配置管理仍可用，保存不会受影响。
+      {{ t('dashboard.gatewayDown') }}
     </div>
 
     <div class="card">
-      <h3 style="margin-top: 0">配置状态</h3>
+      <h3 style="margin-top: 0">{{ t('dashboard.configState') }}</h3>
       <table>
         <tbody>
           <tr>
-            <td style="width: 200px" class="muted">配置状态</td>
+            <td style="width: 200px" class="muted">{{ t('dashboard.configState') }}</td>
             <td>
               <span v-if="status.configState" class="badge" :class="stateMap[status.configState]?.cls">
                 {{ stateMap[status.configState]?.label }}
@@ -76,21 +78,21 @@ async function bootstrap() {
             </td>
           </tr>
           <tr>
-            <td class="muted">上次重载</td>
+            <td class="muted">{{ t('dashboard.lastReload') }}</td>
             <td>
               <template v-if="status.config?.last_reload">
-                {{ status.config.last_reload.successful ? '成功' : '失败' }}
+                {{ status.config.last_reload.successful ? t('dashboard.success') : t('dashboard.failed') }}
                 <span class="muted">@ {{ status.config.last_reload.at || '' }}</span>
               </template>
               <span v-else class="muted">—</span>
             </td>
           </tr>
           <tr>
-            <td class="muted">配置源</td>
+            <td class="muted">{{ t('dashboard.source') }}</td>
             <td>{{ status.config?.source?.type || '—' }}</td>
           </tr>
           <tr>
-            <td class="muted">应用时间</td>
+            <td class="muted">{{ t('dashboard.appliedAt') }}</td>
             <td>{{ status.config?.applied?.applied_at || '—' }}</td>
           </tr>
         </tbody>
@@ -98,10 +100,10 @@ async function bootstrap() {
     </div>
 
     <div class="card" v-if="status.config?.rejected?.length">
-      <h3 style="margin-top: 0; color: var(--red)">被拒绝的资源</h3>
+      <h3 style="margin-top: 0; color: var(--red)">{{ t('dashboard.rejected') }}</h3>
       <table>
         <thead>
-          <tr><th>类型</th><th>ID</th><th>原因</th></tr>
+          <tr><th>{{ t('app.nav.providerKeys') }}</th><th>ID</th><th>{{ t('dashboard.reason') }}</th></tr>
         </thead>
         <tbody>
           <tr v-for="(r, i) in status.config.rejected" :key="i">
@@ -114,10 +116,10 @@ async function bootstrap() {
     </div>
 
     <div class="card" v-if="status.config?.partially_compatible?.length">
-      <h3 style="margin-top: 0; color: var(--amber)">部分兼容字段</h3>
+      <h3 style="margin-top: 0; color: var(--amber)">{{ t('dashboard.partialCompat') }}</h3>
       <table>
         <thead>
-          <tr><th>类型</th><th>字段</th><th>数量</th></tr>
+          <tr><th>{{ t('app.nav.providerKeys') }}</th><th>{{ t('dashboard.field') }}</th><th>{{ t('dashboard.count') }}</th></tr>
         </thead>
         <tbody>
           <tr v-for="(p, i) in status.config.partially_compatible" :key="i">
@@ -130,20 +132,20 @@ async function bootstrap() {
     </div>
 
     <div class="card">
-      <h3 style="margin-top: 0">模型健康</h3>
+      <h3 style="margin-top: 0">{{ t('dashboard.modelHealth') }}</h3>
       <table>
         <thead>
-          <tr><th>模型</th><th>类型</th><th>状态</th><th>检查结果</th></tr>
+          <tr><th>{{ t('app.nav.models') }}</th><th>{{ t('models.colType') }}</th><th>{{ t('common.status') }}</th><th>{{ t('dashboard.checkResult') }}</th></tr>
         </thead>
         <tbody>
           <tr v-if="!status.modelsHealth.length">
-            <td colspan="4" class="muted">暂无数据（网关离线或未配置模型）</td>
+            <td colspan="4" class="muted">{{ t('dashboard.noModelData') }}</td>
           </tr>
           <tr v-for="m in status.modelsHealth" :key="m.id">
             <td>{{ m.display_name }}</td>
             <td>{{ m.kind }}</td>
             <td>
-              <span class="badge" :class="statusMap[m.status]?.cls">{{ statusMap[m.status]?.label }}</span>
+              <span class="badge" :class="statusMap[m.status]?.cls">{{ statusMap[m.status]?.label || m.status }}</span>
             </td>
             <td class="muted">{{ m.status_reason || m.last_check_status || '—' }}</td>
           </tr>
@@ -152,7 +154,7 @@ async function bootstrap() {
     </div>
 
     <div class="card">
-      <h3 style="margin-top: 0">资源数量</h3>
+      <h3 style="margin-top: 0">{{ t('dashboard.resourceCounts') }}</h3>
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px">
         <div v-for="(label, kind) in kindLabels" :key="kind">
           <span class="muted">{{ label }}:</span> {{ status.counts[kind] ?? 0 }}

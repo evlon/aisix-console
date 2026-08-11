@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
 import { stringify as stringifyYaml } from 'yaml';
 
+const { t } = useI18n();
 const entries = ref([]);
 const providerKeys = ref([]);
 const allModels = ref([]); // all model display_names (for target dropdowns)
@@ -52,16 +54,15 @@ const emptyForm = () => ({
 });
 
 const form = ref(emptyForm());
-const previewYaml = computed(() => {
-  try {
-    return stringifyYaml(buildEntry(), { lineWidth: 0 });
-  } catch (e) {
-    return `# ${e.message}`;
-  }
-});
 
 const strategyOptions = ['round_robin', 'weighted', 'failover', 'least_cost', 'least_latency', 'least_busy'];
-const shapeLabels = { direct: '直连', routing: '路由/回退', ensemble: '集成', semantic: '语义' };
+const shapeLabels = {
+  direct: () => t('models.shapeDirect'),
+  routing: () => t('models.shapeRouting'),
+  ensemble: () => t('models.shapeEnsemble'),
+  semantic: () => t('models.shapeSemantic'),
+};
+const shapeKeys = { direct: 'shapeDirect', routing: 'shapeRouting', ensemble: 'shapeEnsemble', semantic: 'shapeSemantic' };
 
 async function load() {
   loading.value = true;
@@ -105,10 +106,10 @@ function openEdit(e) {
   const r = e.routing || {};
   f.routing = {
     strategy: r.strategy ?? 'failover',
-    targets: (r.targets ?? []).map((t) => ({
-      model: t.model ?? '',
-      weight: t.weight ?? '',
-      tags: (t.tags ?? []).join(','),
+    targets: (r.targets ?? []).map((x) => ({
+      model: x.model ?? '',
+      weight: x.weight ?? '',
+      tags: (x.tags ?? []).join(','),
     })),
     retries: r.retries ?? '',
     max_fallbacks: r.max_fallbacks ?? '',
@@ -132,12 +133,12 @@ function openEdit(e) {
   f.semantic = {
     embedding_model: s.embedding_model ?? '',
     match_threshold: s.match?.threshold ?? '',
-    routes: (s.routes ?? []).map((r) => ({
-      name: r.name ?? '',
-      target: r.target ?? '',
-      description: r.description ?? '',
-      examples: (r.examples ?? []).join(' | '),
-      threshold: r.threshold ?? '',
+    routes: (s.routes ?? []).map((x) => ({
+      name: x.name ?? '',
+      target: x.target ?? '',
+      description: x.description ?? '',
+      examples: (x.examples ?? []).join(' | '),
+      threshold: x.threshold ?? '',
     })),
     default: s.default ?? '',
     on_embedding_failure: typeof s.on_embedding_failure === 'string' ? s.on_embedding_failure : s.on_embedding_failure?.target || '',
@@ -203,14 +204,14 @@ function buildEntry() {
   } else if (f.shape === 'routing') {
     const r = f.routing;
     const targets = r.targets
-      .filter((t) => t.model)
-      .map((t) => {
-        const o = { model: t.model };
-        if (t.weight !== '') o.weight = Number(t.weight);
-        if (t.tags) o.tags = strArr(t.tags);
+      .filter((x) => x.model)
+      .map((x) => {
+        const o = { model: x.model };
+        if (x.weight !== '') o.weight = Number(x.weight);
+        if (x.tags) o.tags = strArr(x.tags);
         return o;
       });
-    if (!targets.length) throw new Error('路由模型至少需要一个目标模型');
+    if (!targets.length) throw new Error(t('models.routingTargetRequired'));
     entry.routing = { strategy: r.strategy, targets };
     if (r.retries !== '') entry.routing.retries = Number(r.retries);
     if (r.max_fallbacks !== '') entry.routing.max_fallbacks = Number(r.max_fallbacks);
@@ -230,7 +231,7 @@ function buildEntry() {
         if (p.weight !== '') o.weight = Number(p.weight);
         return o;
       });
-    if (!panel.length) throw new Error('集成模型至少需要一个 panel 成员');
+    if (!panel.length) throw new Error(t('models.ensemblePanelRequired'));
     entry.ensemble = { panel };
     if (en.judge.model) {
       const judge = { model: en.judge.model };
@@ -241,16 +242,16 @@ function buildEntry() {
   } else if (f.shape === 'semantic') {
     const s = f.semantic;
     const routes = s.routes
-      .filter((r) => r.name && r.target)
-      .map((r) => {
-        const o = { name: r.name, target: r.target };
-        if (r.description) o.description = r.description;
-        const ex = strArr(r.examples);
+      .filter((x) => x.name && x.target)
+      .map((x) => {
+        const o = { name: x.name, target: x.target };
+        if (x.description) o.description = x.description;
+        const ex = strArr(x.examples);
         if (ex.length) o.examples = ex;
-        if (r.threshold !== '') o.threshold = Number(r.threshold);
+        if (x.threshold !== '') o.threshold = Number(x.threshold);
         return o;
       });
-    if (!routes.length) throw new Error('语义模型至少需要一个 route');
+    if (!routes.length) throw new Error(t('models.semanticRouteRequired'));
     entry.semantic = { embedding_model: s.embedding_model, routes };
     if (s.default) entry.semantic.default = s.default;
     if (s.match_threshold !== '') entry.semantic.match = { threshold: Number(s.match_threshold) };
@@ -260,9 +261,17 @@ function buildEntry() {
   return entry;
 }
 
+const previewYaml = computed(() => {
+  try {
+    return stringifyYaml(buildEntry(), { lineWidth: 0 });
+  } catch (e) {
+    return `# ${e.message}`;
+  }
+});
+
 async function save() {
   if (!form.value.display_name) {
-    lastResult.value = { ok: false, errors: [{ message: 'display_name 必填' }] };
+    lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
   let entry;
@@ -291,7 +300,7 @@ async function save() {
 }
 
 async function remove(e) {
-  if (!confirm(`删除模型 "${e.display_name}"？`)) return;
+  if (!confirm(t('models.deleteConfirm', { name: e.display_name }))) return;
   try {
     const r = await api.remove('models', e.display_name);
     lastResult.value = r;
@@ -312,193 +321,193 @@ onMounted(load);
 
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <h3 style="margin: 0">模型</h3>
-        <button class="primary" @click="openCreate">+ 新增</button>
+        <h3 style="margin: 0">{{ t('models.title') }}</h3>
+        <button class="primary" @click="openCreate">+ {{ t('common.add') }}</button>
       </div>
       <table style="margin-top: 12px">
         <thead>
-          <tr><th>名称</th><th>类型</th><th>目标</th><th>操作</th></tr>
+          <tr><th>{{ t('common.name') }}</th><th>{{ t('models.colType') }}</th><th>{{ t('models.colTarget') }}</th><th>{{ t('common.actions') }}</th></tr>
         </thead>
         <tbody>
           <tr v-if="!loading && !entries.length">
-            <td colspan="4" class="muted">暂无模型</td>
+            <td colspan="4" class="muted">{{ t('models.empty') }}</td>
           </tr>
           <tr v-for="e in entries" :key="e.display_name">
             <td>{{ e.display_name }}</td>
-            <td><span class="badge">{{ shapeLabels[detectShape(e)] }}</span></td>
+            <td><span class="badge">{{ t('models.' + shapeKeys[detectShape(e)]) }}</span></td>
             <td class="muted">
-              <template v-if="e.routing">{{ e.routing.strategy }} → {{ e.routing.targets.map((t) => t.model).join(', ') }}</template>
-              <template v-else-if="e.ensemble">{{ e.ensemble.panel.map((p) => p.model).join(', ') }} (集成)</template>
-              <template v-else-if="e.semantic">{{ e.semantic.routes.map((r) => r.name).join(', ') }} (语义)</template>
+              <template v-if="e.routing">{{ e.routing.strategy }} → {{ e.routing.targets.map((x) => x.model).join(', ') }}</template>
+              <template v-else-if="e.ensemble">{{ e.ensemble.panel.map((p) => p.model).join(', ') }} (ensemble)</template>
+              <template v-else-if="e.semantic">{{ e.semantic.routes.map((x) => x.name).join(', ') }} (semantic)</template>
               <template v-else>{{ e.provider }} / {{ e.model_name }}</template>
             </td>
             <td>
-              <button style="margin-right: 6px" @click="openEdit(e)">编辑</button>
-              <button class="danger" @click="remove(e)">删除</button>
+              <button style="margin-right: 6px" @click="openEdit(e)">{{ t('common.edit') }}</button>
+              <button class="danger" @click="remove(e)">{{ t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <Modal v-if="editing !== null" :title="editing.display_name ? `编辑 ${editing.display_name}` : '新增模型'" @close="editing = null">
+    <Modal v-if="editing !== null" :title="editing.display_name ? t('models.edit', { name: editing.display_name }) : t('models.add')" @close="editing = null">
       <div style="margin-bottom: 12px">
         <button v-for="s in ['form', 'raw']" :key="s" :class="{ primary: tab === s }" style="margin-right: 6px" @click="tab = s">
-          {{ s === 'form' ? '表单' : '原始 YAML' }}
+          {{ s === 'form' ? t('models.tabForm') : t('models.tabRaw') }}
         </button>
       </div>
 
       <template v-if="tab === 'form'">
         <div class="form-row">
-          <label>名称 *</label>
-          <input v-model="form.display_name" placeholder="调用方请求时使用的 model 名" />
+          <label>{{ t('common.name') }} *</label>
+          <input v-model="form.display_name" :placeholder="t('models.upstreamModel')" />
         </div>
         <div class="form-row">
-          <label>模型形态</label>
+          <label>{{ t('models.shape') }}</label>
           <select v-model="form.shape">
-            <option v-for="(label, val) in shapeLabels" :key="val" :value="val">{{ label }}</option>
+            <option v-for="(k, val) in shapeKeys" :key="val" :value="val">{{ t('models.' + k) }}</option>
           </select>
         </div>
 
         <!-- direct -->
         <template v-if="form.shape === 'direct'">
           <div class="form-row">
-            <label>Provider</label>
+            <label>{{ t('models.provider') }}</label>
             <input v-model="form.direct.provider" placeholder="openai / deepseek / ..." />
           </div>
           <div class="form-row">
-            <label>上游模型名</label>
+            <label>{{ t('models.upstreamModel') }}</label>
             <input v-model="form.direct.model_name" placeholder="gpt-4o-mini" />
           </div>
           <div class="form-row">
-            <label>Provider Key</label>
+            <label>{{ t('models.providerKey') }}</label>
             <select v-model="form.direct.provider_key">
-              <option value="">选择…</option>
+              <option value="">{{ t('models.choose') }}</option>
               <option v-for="p in providerKeys" :key="p.display_name" :value="p.display_name">{{ p.display_name }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>自动提示缓存</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.direct.auto_prompt_caching" /> Anthropic 直连模型</label>
+            <label>{{ t('models.autoPromptCache') }}</label>
+            <label style="justify-self: start"><input type="checkbox" v-model="form.direct.auto_prompt_caching" /> {{ t('models.autoPromptCacheHint') }}</label>
           </div>
           <div class="form-row">
-            <label>冷却（cooldown）</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.common.cooldown" /> 上游异常后进入冷却</label>
+            <label>{{ t('models.cooldown') }}</label>
+            <label style="justify-self: start"><input type="checkbox" v-model="form.common.cooldown" /> {{ t('models.cooldownHint') }}</label>
           </div>
         </template>
 
         <!-- routing -->
         <template v-if="form.shape === 'routing'">
           <div class="form-row">
-            <label>策略</label>
+            <label>{{ t('models.strategy') }}</label>
             <select v-model="form.routing.strategy">
               <option v-for="s in strategyOptions" :key="s" :value="s">{{ s }}</option>
             </select>
           </div>
           <div class="form-row full">
-            <label style="text-align: left">目标（按顺序回退）</label>
-            <div v-for="(t, i) in form.routing.targets" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center">
-              <select v-model="t.model" style="flex: 1">
-                <option value="">选择模型…</option>
+            <label style="text-align: left">{{ t('models.targets') }}</label>
+            <div v-for="(x, i) in form.routing.targets" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center">
+              <select v-model="x.model" style="flex: 1">
+                <option value="">{{ t('models.chooseModel') }}</option>
                 <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
               </select>
-              <input v-model="t.weight" placeholder="weight" style="width: 80px" />
-              <input v-model="t.tags" placeholder="tags 逗号分隔" style="width: 140px" />
+              <input v-model="x.weight" :placeholder="t('models.weight')" style="width: 80px" />
+              <input v-model="x.tags" :placeholder="t('models.tagsCsv')" style="width: 140px" />
               <button @click="form.routing.targets.splice(i, 1)">✕</button>
             </div>
-            <button @click="form.routing.targets.push({ model: '', weight: '', tags: '' })">+ 添加目标</button>
+            <button @click="form.routing.targets.push({ model: '', weight: '', tags: '' })">{{ t('models.addTarget') }}</button>
           </div>
           <div class="form-row">
-            <label>重试次数</label>
+            <label>{{ t('models.retries') }}</label>
             <input v-model="form.routing.retries" type="number" placeholder="0" />
           </div>
           <div class="form-row">
-            <label>最大回退次数</label>
-            <input v-model="form.routing.max_fallbacks" type="number" placeholder="目标数-1" />
+            <label>{{ t('models.maxFallbacks') }}</label>
+            <input v-model="form.routing.max_fallbacks" type="number" />
           </div>
           <div class="form-row">
-            <label>回退状态码</label>
-            <input v-model="form.routing.fallback_on_statuses" placeholder="429,500,502,503,504 逗号分隔" />
+            <label>{{ t('models.fallbackStatuses') }}</label>
+            <input v-model="form.routing.fallback_on_statuses" :placeholder="t('models.fallbackStatusesPlaceholder')" />
           </div>
           <div class="form-row">
-            <label>全部不可用时</label>
+            <label>{{ t('models.whenAllUnavailable') }}</label>
             <select v-model="form.routing.when_all_unavailable">
-              <option value="fail">失败</option>
-              <option value="try_anyway">仍然尝试</option>
+              <option value="fail">{{ t('models.fail') }}</option>
+              <option value="try_anyway">{{ t('models.tryAnyway') }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>重试 429</label>
+            <label>{{ t('models.retry429') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.routing.retry_on_429" /></label>
           </div>
           <div class="form-row">
-            <label>Sticky 哈希</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.routing.sticky" />（weighted 策略按请求哈希固定目标）</label>
+            <label>{{ t('models.stickyHash') }}</label>
+            <label style="justify-self: start"><input type="checkbox" v-model="form.routing.sticky" /> {{ t('models.stickyHint') }}</label>
           </div>
         </template>
 
         <!-- ensemble -->
         <template v-if="form.shape === 'ensemble'">
           <div class="form-row full">
-            <label style="text-align: left">Panel 成员</label>
+            <label style="text-align: left">{{ t('models.panel') }}</label>
             <div v-for="(p, i) in form.ensemble.panel" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center">
               <select v-model="p.model" style="flex: 1">
-                <option value="">选择模型…</option>
+                <option value="">{{ t('models.chooseModel') }}</option>
                 <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
               </select>
               <input v-model="p.temperature" placeholder="temp" style="width: 70px" />
-              <input v-model="p.weight" placeholder="weight" style="width: 70px" />
+              <input v-model="p.weight" :placeholder="t('models.weight')" style="width: 70px" />
               <button @click="form.ensemble.panel.splice(i, 1)">✕</button>
             </div>
-            <button @click="form.ensemble.panel.push({ model: '', temperature: '', seed: '', weight: '' })">+ 添加成员</button>
+            <button @click="form.ensemble.panel.push({ model: '', temperature: '', seed: '', weight: '' })">{{ t('models.addMember') }}</button>
           </div>
           <div class="form-row">
-            <label>评审模型</label>
+            <label>{{ t('models.judgeModel') }}</label>
             <select v-model="form.ensemble.judge.model">
-              <option value="">（可选）</option>
+              <option value="">{{ t('models.optional') }}</option>
               <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>最低成功数</label>
-            <input v-model="form.ensemble.min_responses" type="number" placeholder="默认 min(2, panel数)" />
+            <label>{{ t('models.minResponses') }}</label>
+            <input v-model="form.ensemble.min_responses" type="number" :placeholder="t('models.minResponsesPlaceholder')" />
           </div>
         </template>
 
         <!-- semantic -->
         <template v-if="form.shape === 'semantic'">
           <div class="form-row">
-            <label>嵌入模型</label>
+            <label>{{ t('models.embeddingModel') }}</label>
             <select v-model="form.semantic.embedding_model">
-              <option value="">选择…</option>
+              <option value="">{{ t('models.choose') }}</option>
               <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>匹配阈值</label>
+            <label>{{ t('models.matchThreshold') }}</label>
             <input v-model="form.semantic.match_threshold" type="number" step="0.05" placeholder="0~1" />
           </div>
           <div class="form-row full">
-            <label style="text-align: left">路由（按语义匹配）</label>
+            <label style="text-align: left">{{ t('models.routes') }}</label>
             <div v-for="(r, i) in form.semantic.routes" :key="i" style="border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px">
               <div style="display: flex; gap: 6px; margin-bottom: 6px">
-                <input v-model="r.name" placeholder="路由名" style="flex: 1" />
+                <input v-model="r.name" :placeholder="t('models.routeName')" style="flex: 1" />
                 <select v-model="r.target" style="flex: 1">
-                  <option value="">目标模型…</option>
+                  <option value="">{{ t('models.targetModel') }}</option>
                   <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
                 </select>
                 <button @click="form.semantic.routes.splice(i, 1)">✕</button>
               </div>
-              <input v-model="r.description" placeholder="描述（可选）" style="width: 100%; margin-bottom: 6px" />
-              <input v-model="r.examples" placeholder="示例话语，用 | 分隔（至少 1 条）" style="width: 100%; margin-bottom: 6px" />
-              <input v-model="r.threshold" placeholder="阈值 0~1（可选）" style="width: 100%" />
+              <input v-model="r.description" :placeholder="t('models.routeDesc')" style="width: 100%; margin-bottom: 6px" />
+              <input v-model="r.examples" :placeholder="t('models.routeExamples')" style="width: 100%; margin-bottom: 6px" />
+              <input v-model="r.threshold" :placeholder="t('models.routeThreshold')" style="width: 100%" />
             </div>
-            <button @click="form.semantic.routes.push({ name: '', target: '', description: '', examples: '', threshold: '' })">+ 添加路由</button>
+            <button @click="form.semantic.routes.push({ name: '', target: '', description: '', examples: '', threshold: '' })">{{ t('models.addRoute') }}</button>
           </div>
           <div class="form-row">
-            <label>默认目标</label>
+            <label>{{ t('models.defaultTarget') }}</label>
             <select v-model="form.semantic.default">
-              <option value="">（可选）</option>
+              <option value="">{{ t('models.optional') }}</option>
               <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
             </select>
           </div>
@@ -506,19 +515,19 @@ onMounted(load);
 
         <hr style="border-color: var(--border); margin: 14px 0" />
         <div class="form-row">
-          <label>超时 (ms)</label>
-          <input v-model="form.common.timeout" type="number" placeholder="默认" />
+          <label>{{ t('models.timeoutMs') }}</label>
+          <input v-model="form.common.timeout" type="number" />
         </div>
         <div class="form-row">
-          <label>流式超时 (ms)</label>
-          <input v-model="form.common.stream_timeout" type="number" placeholder="默认" />
+          <label>{{ t('models.streamTimeoutMs') }}</label>
+          <input v-model="form.common.stream_timeout" type="number" />
         </div>
         <div class="form-row">
-          <label>重试</label>
+          <label>{{ t('models.retry') }}</label>
           <input v-model="form.common.retries" type="number" placeholder="0" />
         </div>
         <div class="form-row full">
-          <label style="text-align: left">限流（留空不设）</label>
+          <label style="text-align: left">{{ t('models.rateLimit') }}</label>
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px">
             <input v-model="form.common.rps" placeholder="rps" />
             <input v-model="form.common.rpm" placeholder="rpm" />
@@ -526,33 +535,33 @@ onMounted(load);
             <input v-model="form.common.rpd" placeholder="rpd" />
             <input v-model="form.common.tpm" placeholder="tpm" />
             <input v-model="form.common.tpd" placeholder="tpd" />
-            <input v-model="form.common.concurrency" placeholder="并发" />
+            <input v-model="form.common.concurrency" placeholder="concurrency" />
           </div>
         </div>
         <div class="form-row">
-          <label>允许 CIDR</label>
-          <input v-model="form.common.allowed_cidrs" placeholder="10.0.0.0/8, 逗号分隔" />
+          <label>{{ t('models.allowedCidrs') }}</label>
+          <input v-model="form.common.allowed_cidrs" placeholder="10.0.0.0/8, ..." />
         </div>
         <div class="form-row">
-          <label>成本 ($/1K)</label>
+          <label>{{ t('models.cost') }}</label>
           <div style="display: flex; gap: 6px">
-            <input v-model="form.common.cost_input" placeholder="输入" style="flex: 1" />
-            <input v-model="form.common.cost_output" placeholder="输出" style="flex: 1" />
+            <input v-model="form.common.cost_input" :placeholder="t('models.costInput')" style="flex: 1" />
+            <input v-model="form.common.cost_output" :placeholder="t('models.costOutput')" style="flex: 1" />
           </div>
         </div>
       </template>
 
       <template v-else>
         <RawYamlEditor :model-value="previewYaml" />
-        <div class="muted" style="margin-top: 6px">当前表单内容的 YAML 预览；如需手写编辑请到「原始 YAML」页编辑整个文件。</div>
+        <div class="muted" style="margin-top: 6px">{{ t('models.rawPreviewHint') }}</div>
       </template>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
-        <button @click="editing = null">取消</button>
-        <button class="primary" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存（校验并写文件）' }}</button>
+        <button @click="editing = null">{{ t('common.cancel') }}</button>
+        <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        已保存{{ lastResult.reload?.warning ? '；' + lastResult.reload.warning : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
       </div>
     </Modal>
   </div>

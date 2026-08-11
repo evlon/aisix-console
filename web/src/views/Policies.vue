@@ -1,14 +1,17 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
+const { t } = useI18n();
+
 const KINDS = [
-  { key: 'rate_limit_policies', label: '限流策略' },
-  { key: 'cache_policies', label: '缓存策略' },
-  { key: 'guardrails', label: '内容安全护栏' },
+  { key: 'rate_limit_policies', label: () => t('policies.rateLimit') },
+  { key: 'cache_policies', label: () => t('policies.cache') },
+  { key: 'guardrails', label: () => t('policies.guardrails') },
 ];
 
 const activeKind = ref(KINDS[0].key);
@@ -94,18 +97,14 @@ function buildEntry() {
   const f = JSON.parse(JSON.stringify(form.value));
   if (activeKind.value === 'rate_limit_policies') {
     const out = { name: f.name, scope: f.scope };
-    if (f.scope === 'api_key' || f.scope === 'model') {
-      out.scope_ref = f.scope_ref; // name sugar, resolved by desugar
-    } else {
-      out.scope_ref = f.scope_ref;
-    }
+    out.scope_ref = f.scope_ref;
     out.window = f.window;
     if (f.max_requests !== '') out.max_requests = Number(f.max_requests);
     if (f.max_tokens !== '') out.max_tokens = Number(f.max_tokens);
     return out;
   }
   if (activeKind.value === 'cache_policies') {
-    const out = {
+    return {
       name: f.name,
       enabled: !!f.enabled,
       backend: f.backend,
@@ -114,7 +113,6 @@ function buildEntry() {
       scope: f.scope,
       purge_generation: Number(f.purge_generation || 0),
     };
-    return out;
   }
   // guardrail
   const out = {
@@ -126,7 +124,7 @@ function buildEntry() {
   };
   if (f.kind === 'keyword') {
     out.patterns = (f.patterns || []).map((p) => p.trim()).filter(Boolean);
-    if (!out.patterns.length) throw new Error('keyword 护栏至少需要一个 pattern');
+    if (!out.patterns.length) throw new Error(t('policies.grPatterns') + ' *');
   } else if (f.pii_entities) {
     out.pii_entities = f.pii_entities;
   }
@@ -136,7 +134,7 @@ function buildEntry() {
 
 async function save() {
   if (!form.value.name) {
-    lastResult.value = { ok: false, errors: [{ message: 'name 必填' }] };
+    lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
   let entry;
@@ -170,7 +168,7 @@ async function saveRaw() {
   try {
     entry = parseYaml(rawText.value || '', { uniqueKeys: true });
   } catch (e) {
-    lastResult.value = { ok: false, errors: [{ message: `YAML 解析失败: ${e.message}` }] };
+    lastResult.value = { ok: false, errors: [{ message: `YAML: ${e.message}` }] };
     return;
   }
   saving.value = true;
@@ -194,7 +192,7 @@ async function saveRaw() {
 
 async function remove(e) {
   const identity = e[IDENTITY[activeKind.value]];
-  if (!confirm(`删除 ${kindOf(activeKind.value).label} "${identity}"？`)) return;
+  if (!confirm(`${kindOf(activeKind.value).label()} "${identity}"?`)) return;
   try {
     const r = await api.remove(activeKind.value, identity);
     lastResult.value = r;
@@ -205,14 +203,15 @@ async function remove(e) {
 }
 
 function tableCols() {
-  if (activeKind.value === 'rate_limit_policies') return ['name', 'scope', 'scope_ref', 'window', '限制'];
+  if (activeKind.value === 'rate_limit_policies') return ['name', 'scope', 'scope_ref', 'window', 'limits'];
   if (activeKind.value === 'cache_policies') return ['name', 'backend', 'ttl', 'applies_to', 'scope'];
   return ['name', 'kind', 'hook_point', 'enabled'];
 }
 
 function cell(e, col) {
-  if (col === '限制') return `${e.max_requests ? e.max_requests + ' req' : ''}${e.max_tokens ? (e.max_requests ? ' / ' : '') + e.max_tokens + ' tok' : ''}`;
+  if (col === 'limits') return `${e.max_requests ? e.max_requests + ' req' : ''}${e.max_tokens ? (e.max_requests ? ' / ' : '') + e.max_tokens + ' tok' : ''}`;
   if (col === 'ttl') return `${e.ttl_seconds}s`;
+  if (col === 'enabled') return e.enabled ? t('common.enabled') : t('common.disabled');
   return e[col] ?? '—';
 }
 
@@ -228,7 +227,7 @@ onMounted(load);
         :class="{ primary: activeKind === k.key }"
         @click="activeKind = k.key; switchKind()"
       >
-        {{ k.label }}
+        {{ k.label() }}
       </button>
     </div>
 
@@ -238,71 +237,69 @@ onMounted(load);
 
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <h3 style="margin: 0">{{ kindOf(activeKind).label }}</h3>
-        <button class="primary" @click="openCreate">+ 新增</button>
+        <h3 style="margin: 0">{{ kindOf(activeKind).label() }}</h3>
+        <button class="primary" @click="openCreate">+ {{ t('common.add') }}</button>
       </div>
-      <p class="muted" style="margin-bottom: 0">
-        表单覆盖常见配置；复杂规则请用「编辑 → 原始 YAML」。保存时都会经过 <code>aisix validate</code> 校验。
-      </p>
+      <p class="muted" style="margin-bottom: 0">{{ t('policies.hint') }}</p>
       <table style="margin-top: 12px">
         <thead>
           <tr>
-            <th v-for="c in tableCols()" :key="c">{{ c }}</th>
-            <th>操作</th>
+            <th v-for="c in tableCols()" :key="c">{{ c === 'name' ? t('common.name') : c === 'enabled' ? t('common.status') : c }}</th>
+            <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="!loading && !entries.length">
-            <td :colspan="tableCols().length + 1" class="muted">暂无记录</td>
+            <td :colspan="tableCols().length + 1" class="muted">{{ t('policies.empty') }}</td>
           </tr>
           <tr v-for="(e, i) in entries" :key="i">
             <td v-for="c in tableCols()" :key="c">{{ cell(e, c) }}</td>
             <td>
-              <button style="margin-right: 6px" @click="openEdit(e)">编辑</button>
-              <button class="danger" @click="remove(e)">删除</button>
+              <button style="margin-right: 6px" @click="openEdit(e)">{{ t('common.edit') }}</button>
+              <button class="danger" @click="remove(e)">{{ t('common.delete') }}</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <Modal v-if="editing !== null" :title="(editing.original ? `编辑 ` : `新增 `) + kindOf(activeKind).label" @close="editing = null">
+    <Modal v-if="editing !== null" :title="(editing.original ? t('policies.edit') : t('policies.add')) + ' — ' + kindOf(activeKind).label()" @close="editing = null">
       <div style="margin-bottom: 12px">
-        <button :class="{ primary: tab === 'form' }" style="margin-right: 6px" @click="tab = 'form'">表单</button>
-        <button :class="{ primary: tab === 'raw' }" @click="tab = 'raw'">原始 YAML</button>
+        <button :class="{ primary: tab === 'form' }" style="margin-right: 6px" @click="tab = 'form'">{{ t('policies.tabForm') }}</button>
+        <button :class="{ primary: tab === 'raw' }" @click="tab = 'raw'">{{ t('policies.tabRaw') }}</button>
       </div>
 
       <template v-if="tab === 'form'">
         <!-- rate limit policy -->
         <template v-if="activeKind === 'rate_limit_policies'">
           <div class="form-row">
-            <label>名称 *</label>
-            <input v-model="form.name" placeholder="如 key-rpm" />
+            <label>{{ t('policies.rlName') }} *</label>
+            <input v-model="form.name" placeholder="key-rpm" />
           </div>
           <div class="form-row">
-            <label>作用范围</label>
+            <label>{{ t('policies.rlScope') }}</label>
             <select v-model="form.scope">
-              <option value="api_key">api_key（按调用方）</option>
-              <option value="model">model（按模型）</option>
+              <option value="api_key">api_key</option>
+              <option value="model">model</option>
               <option value="team">team</option>
               <option value="member">member</option>
               <option value="team_member">team_member</option>
             </select>
           </div>
           <div class="form-row">
-            <label>对象引用</label>
+            <label>{{ t('policies.rlScopeRef') }}</label>
             <select v-if="form.scope === 'api_key'" v-model="form.scope_ref">
-              <option value="">选择…</option>
+              <option value="">{{ t('policies.choose') }}</option>
               <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
             </select>
             <select v-else-if="form.scope === 'model'" v-model="form.scope_ref">
-              <option value="">选择…</option>
+              <option value="">{{ t('policies.choose') }}</option>
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
             <input v-else v-model="form.scope_ref" placeholder="team/member ID" />
           </div>
           <div class="form-row">
-            <label>窗口</label>
+            <label>{{ t('policies.rlWindow') }}</label>
             <select v-model="form.window">
               <option value="second">second</option>
               <option value="minute">minute</option>
@@ -310,10 +307,10 @@ onMounted(load);
             </select>
           </div>
           <div class="form-row">
-            <label>上限</label>
+            <label>{{ t('policies.rlMax') }}</label>
             <div style="display: flex; gap: 6px">
-              <input v-model="form.max_requests" type="number" placeholder="max_requests" style="flex: 1" />
-              <input v-model="form.max_tokens" type="number" placeholder="max_tokens" style="flex: 1" />
+              <input v-model="form.max_requests" type="number" :placeholder="t('policies.rlMaxRequests')" style="flex: 1" />
+              <input v-model="form.max_tokens" type="number" :placeholder="t('policies.rlMaxTokens')" style="flex: 1" />
             </div>
           </div>
         </template>
@@ -321,33 +318,33 @@ onMounted(load);
         <!-- cache policy -->
         <template v-else-if="activeKind === 'cache_policies'">
           <div class="form-row">
-            <label>名称 *</label>
+            <label>{{ t('policies.cacheName') }} *</label>
             <input v-model="form.name" />
           </div>
           <div class="form-row">
-            <label>启用</label>
+            <label>{{ t('policies.cacheEnabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
           </div>
           <div class="form-row">
-            <label>后端</label>
+            <label>{{ t('policies.cacheBackend') }}</label>
             <select v-model="form.backend">
               <option value="memory">memory</option>
               <option value="redis">redis</option>
             </select>
           </div>
           <div class="form-row">
-            <label>TTL (秒)</label>
+            <label>{{ t('policies.cacheTtl') }}</label>
             <input v-model="form.ttl_seconds" type="number" />
           </div>
           <div class="form-row">
-            <label>applies_to</label>
+            <label>{{ t('policies.cacheAppliesTo') }}</label>
             <input v-model="form.applies_to" placeholder="all / model:xxx / api_key:xxx" />
           </div>
           <div class="form-row">
-            <label>共享范围</label>
+            <label>{{ t('policies.cacheScope') }}</label>
             <select v-model="form.scope">
-              <option value="api_key">api_key（按调用方隔离）</option>
-              <option value="env">env（全环境共享）</option>
+              <option value="api_key">{{ t('policies.cacheScopeApiKey') }}</option>
+              <option value="env">{{ t('policies.cacheScopeEnv') }}</option>
             </select>
           </div>
         </template>
@@ -355,45 +352,45 @@ onMounted(load);
         <!-- guardrail -->
         <template v-else>
           <div class="form-row">
-            <label>名称 *</label>
+            <label>{{ t('policies.grName') }} *</label>
             <input v-model="form.name" />
           </div>
           <div class="form-row">
-            <label>类型</label>
+            <label>{{ t('policies.grKind') }}</label>
             <select v-model="form.kind">
-              <option value="keyword">keyword（关键词）</option>
-              <option value="pii">pii（PII 检测）</option>
-              <option value="openai_moderation">openai_moderation</option>
-              <option value="lakera">lakera</option>
-              <option value="presidio">presidio</option>
-              <option value="azure_content_safety">azure_content_safety</option>
-              <option value="bedrock">bedrock</option>
-              <option value="aliyun_content_safety">aliyun_content_safety</option>
+              <option value="keyword">{{ t('policies.keyword') }}</option>
+              <option value="pii">{{ t('policies.pii') }}</option>
+              <option value="openai_moderation">{{ t('policies.openaiModeration') }}</option>
+              <option value="lakera">{{ t('policies.lakera') }}</option>
+              <option value="presidio">{{ t('policies.presidio') }}</option>
+              <option value="azure_content_safety">{{ t('policies.azureContentSafety') }}</option>
+              <option value="bedrock">{{ t('policies.bedrock') }}</option>
+              <option value="aliyun_content_safety">{{ t('policies.aliyunContentSafety') }}</option>
             </select>
           </div>
           <div class="form-row">
-            <label>触发点</label>
+            <label>{{ t('policies.grHook') }}</label>
             <select v-model="form.hook_point">
-              <option value="input">input（输入前）</option>
-              <option value="output">output（输出后）</option>
+              <option value="input">{{ t('policies.grHookInput') }}</option>
+              <option value="output">{{ t('policies.grHookOutput') }}</option>
             </select>
           </div>
           <div class="form-row" v-if="form.kind === 'keyword'">
-            <label>关键词</label>
+            <label>{{ t('policies.grPatterns') }}</label>
             <div>
               <div v-for="(p, i) in form.patterns" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px">
-                <input v-model="form.patterns[i]" placeholder="关键词 / 正则" style="flex: 1" />
+                <input v-model="form.patterns[i]" :placeholder="t('policies.grPatternPlaceholder')" style="flex: 1" />
                 <button @click="form.patterns.splice(i, 1)">✕</button>
               </div>
-              <button @click="form.patterns.push('')">+ 添加</button>
+              <button @click="form.patterns.push('')">+ {{ t('common.add') }}</button>
             </div>
           </div>
           <div class="form-row">
-            <label>启用</label>
+            <label>{{ t('policies.grEnabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
           </div>
           <div class="form-row">
-            <label>上游不可达放行</label>
+            <label>{{ t('policies.grFailOpen') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.fail_open" /></label>
           </div>
         </template>
@@ -404,13 +401,13 @@ onMounted(load);
       </template>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
-        <button @click="editing = null">取消</button>
+        <button @click="editing = null">{{ t('common.cancel') }}</button>
         <button class="primary" :disabled="saving" @click="tab === 'form' ? save() : saveRaw()">
-          {{ saving ? '保存中…' : '保存（校验并写文件）' }}
+          {{ saving ? t('common.saving') : t('common.saveAndReload') }}
         </button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        已保存{{ lastResult.reload?.warning ? '；' + lastResult.reload.warning : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
       </div>
     </Modal>
   </div>

@@ -1,7 +1,9 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 
+const { t } = useI18n();
 const models = ref([]);
 const model = ref('');
 const callerKey = ref(localStorage.getItem('aisix_console_caller_key') || '');
@@ -21,7 +23,7 @@ async function loadModels() {
     models.value = (r.entries ?? []).map((e) => e.display_name).filter(Boolean);
     if (!model.value && models.value.length) model.value = models.value[0];
   } catch (e) {
-    error.value = `无法加载模型列表: ${e.message}`;
+    error.value = t('playground.modelLoadFailed', { msg: e.message });
   }
 }
 
@@ -92,7 +94,7 @@ async function send() {
       messages.value.push({ role: 'assistant', content: output.value });
     }
   } catch (e) {
-    error.value = `请求失败: ${e.message}`;
+    error.value = `request failed: ${e.message}`;
   } finally {
     running.value = false;
   }
@@ -110,52 +112,52 @@ onMounted(loadModels);
 <template>
   <div>
     <div class="card">
-      <h3 style="margin-top: 0">试玩 / 对话</h3>
+      <h3 style="margin-top: 0">{{ t('playground.title') }}</h3>
       <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px">
         <div>
-          <label class="muted" style="display: block; margin-bottom: 4px">模型</label>
+          <label class="muted" style="display: block; margin-bottom: 4px">{{ t('playground.model') }}</label>
           <select v-model="model" style="width: 100%">
             <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
         <div>
-          <label class="muted" style="display: block; margin-bottom: 4px">调用方 API Key</label>
-          <input v-model="callerKey" type="password" placeholder="sk-..." style="width: 100%" @change="saveKey" />
+          <label class="muted" style="display: block; margin-bottom: 4px">{{ t('playground.callerKey') }}</label>
+          <input v-model="callerKey" type="password" :placeholder="t('playground.callerKeyPlaceholder')" style="width: 100%" @change="saveKey" />
         </div>
         <div>
-          <label class="muted" style="display: block; margin-bottom: 4px">temperature</label>
-          <input v-model="temperature" type="number" step="0.1" placeholder="默认" style="width: 100%" />
+          <label class="muted" style="display: block; margin-bottom: 4px">{{ t('playground.temperature') }}</label>
+          <input v-model="temperature" type="number" step="0.1" placeholder="default" style="width: 100%" />
         </div>
         <div style="display: flex; align-items: flex-end; gap: 8px">
           <label style="display: flex; align-items: center; gap: 6px">
-            <input type="checkbox" v-model="stream" /> 流式
+            <input type="checkbox" v-model="stream" /> {{ t('playground.stream') }}
           </label>
-          <button class="danger" @click="clearChat">清空</button>
+          <button class="danger" @click="clearChat">{{ t('playground.clear') }}</button>
         </div>
       </div>
 
       <div v-if="error" class="error-box">{{ error }}</div>
-      <div v-if="!callerKey" class="warn-box">需要填入一个调用方 API Key（到「API Keys」页创建）才能发起真实请求。</div>
+      <div v-if="!callerKey" class="warn-box">{{ t('playground.noKeyWarning') }}</div>
 
       <div style="display: flex; gap: 10px">
         <textarea
           v-model="prompt"
           rows="3"
-          placeholder="输入消息…"
+          :placeholder="t('playground.promptPlaceholder')"
           style="flex: 1; resize: vertical"
           @keydown.enter.exact.prevent="send"
         />
         <button class="primary" :disabled="running || !callerKey" @click="send" style="align-self: stretch">
-          {{ running ? '发送中…' : '发送' }}
+          {{ running ? t('playground.sending') : t('playground.send') }}
         </button>
       </div>
 
       <div style="margin-top: 12px">
-        <label class="muted">回复（{{ stream ? 'SSE 流式' : '一次性' }}）</label>
+        <label class="muted">{{ t('playground.reply', { mode: stream ? t('playground.replyStream') : t('playground.replyOnce') }) }}</label>
         <pre
           class="output"
           style="white-space: pre-wrap; word-break: break-word; background: #0d0f15; border: 1px solid var(--border); border-radius: 6px; padding: 12px; min-height: 120px; max-height: 480px; overflow: auto"
-        >{{ output || '（等待回复…）' }}</pre>
+        >{{ output || t('playground.waiting') }}</pre>
       </div>
     </div>
   </div>

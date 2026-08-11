@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
 
+const { t } = useI18n();
 const raw = ref({ ok: false, exists: false, text: '', error: null });
 const text = ref('');
 const saving = ref(false);
@@ -31,7 +33,7 @@ async function save() {
 }
 
 async function bootstrap() {
-  if (!confirm('用空模板覆盖创建 resources.yaml？将丢失现有文件。')) return;
+  if (!confirm(t('dashboard.fileMissing') + '\n\n' + t('common.confirm') + '?')) return;
   try {
     const r = await api.bootstrap();
     lastResult.value = r;
@@ -53,16 +55,16 @@ onMounted(load);
 
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
-        <h3 style="margin: 0">原始 resources.yaml</h3>
+        <h3 style="margin: 0">{{ t('raw.title') }}</h3>
         <div>
-          <button style="margin-right: 6px" @click="load">重新读取</button>
-          <button class="danger" style="margin-right: 6px" @click="bootstrap">重置为空模板</button>
-          <button class="primary" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存（校验并写文件）' }}</button>
+          <button style="margin-right: 6px" @click="load">{{ t('raw.reload') }}</button>
+          <button class="danger" style="margin-right: 6px" @click="bootstrap">{{ t('raw.reset') }}</button>
+          <button class="primary" :disabled="saving" @click="save">{{ saving ? t('raw.saving') : t('raw.save') }}</button>
         </div>
       </div>
       <RawYamlEditor v-model="text" :rows="24" />
       <div v-if="lastResult?.ok" class="badge ok" style="margin-top: 10px">
-        已保存{{ lastResult.reload?.warning ? '；' + lastResult.reload.warning : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? '；' + t('save.reloadWarning') : '' }}
       </div>
     </div>
   </div>
