@@ -1,95 +1,71 @@
-# Deploy the gateway + console inside WSL
+# Deploy the gateway + console as containers (Podman / Docker)
 
-The console manages a file-mode AISIX gateway. This directory holds the
-deployment plumbing: the GitHub Actions workflow that builds the **Linux**
-gateway binary (see `.github/workflows/build-aisix.yml`), and scripts to fetch
-it into WSL.
+The gateway runs the official image `ghcr.io/api7/aisix:0.8.1`; the console is
+built from this repo's `Dockerfile` (it bakes in the gateway binary so every
+console save is validated against the exact binary the gateway runs).
 
-## Why build the gateway on GitHub Actions?
+## Prerequisites
 
-WSL often has no C toolchain (`gcc`/`cmake`), and the gateway's Rust build
-needs one (`ring`, `aws-lc`). GitHub's `ubuntu-latest` runners have the full
-toolchain, so the workflow compiles `api7/aisix` for Linux x86_64 and publishes
-the binary as an artifact (or a GitHub Release). You then download it and run
-everything in WSL — where the gateway supports SIGHUP hot-reload.
+- Podman machine up (`podman machine start` — Windows; or Docker on Linux).
+- Registry access to `ghcr.io` (public) and `docker.io`.
 
-## 1. Publish the console repo + build the binary
+## Build + run
 
 ```bash
-cd aisix-console
-git push -u origin main            # create the GitHub repo first
-# GitHub → Actions → "build aisix (linux) + release" → Run workflow
-#   aisix_ref:        pinned to the commit this console was tested against
-#   publish_release:  true → creates a GitHub Release (curl-downloadable)
+export PATH="$PATH:/c/Users/niukl/AppData/Local/Programs/Podman"   # Windows
+
+podman pull ghcr.io/api7/aisix:0.8.1
+podman build -t aisix-console:dev .          # from the repo root
+bash deploy/podman-run.sh                    # creates + starts both containers
 ```
 
-Or push a `v*` tag to build the release-profile binary and publish a Release.
+`deploy/podman-run.sh` is idempotent: it (re)creates `aisix-gw` and
+`aisix-console` on a shared volume (`deploy/` mounted at `/etc/aisix` in the
+gateway and `/etc/aisix-console` in the console), so both see the same
+`resources.yaml`. On first run it copies:
+- `resources.template.yaml` → `resources.yaml`
+- `aisix-console.container.yaml` → `aisix-console.yaml`
 
-## 2. Fetch the Linux binary
+## How it fits together
 
-```bash
-# gh CLI (authed):
-REPO=<you>/aisix-console TAG=build-main ./deploy/fetch-aisix-linux.sh
-# behind a firewall (this machine), via the HTTP proxy:
-PROXY=http://10.126.126.100:8888 REPO=<you>/aisix-console TAG=build-main \
-  ./deploy/fetch-aisix-linux.sh
+```
+Windows (localhost, mirrored WSL networking)
+ ├─ podman machine (WSL) — aisix-gw :3000/:3002/:9090  (--network=host)
+ └─ podman machine (WSL) — aisix-console :8787  (--network=host)
+        │  writes deploy/resources.yaml (shared volume)
+        ▼
+   aisix-gw hot-reloads on SIGHUP
 ```
 
-Copy it into WSL:
+- The console UI: http://localhost:8787
+- The gateway: proxy `:3000`, admin `:3002` (port 3001 is used by Tabby on this
+  machine — adjust `deploy/config.yaml` + `deploy/aisix-console.container.yaml`
+  if yours differs), metrics `:9090`
+- **Networking is `--network=host`**: the podman machine shares localhost with
+  Windows (mirrored WSL), so the console reaches the gateway at `127.0.0.1`.
+  (A custom netavark network currently fails with an nftables error in the
+  podman-machine VM — that's why host networking is used.)
+- **Reload**: the console can't signal the gateway across containers. After a
+  save, run `podman kill -s HUP aisix-gw`, or set `reloadCommand` in
+  `deploy/aisix-console.yaml` to a command that can (e.g. a helper that calls
+  the Podman REST API over a mounted socket).
 
-```bash
-wsl
-mkdir -p ~/bin && cp deploy/bin/aisix ~/bin/ && chmod +x ~/bin/aisix
-~/bin/aisix --version
-```
+## Notes / gotchas (this machine)
 
-## 3. Run everything in WSL
+- **Git Bash rewrites `/etc/...` style args.** `deploy/podman-run.sh` sets
+  `MSYS_NO_PATHCONV=1` internally; run it via `bash deploy/podman-run.sh`.
+- **Mirrored WSL networking**: don't bind ports the Windows host already uses
+  (3001 → Tabby, 8080 → an IDE helper, …). The gateway admin is on 3002 here.
+- **Rootless socket**: if `podman` says "ssh: rejected: connect failed (open
+  failed)", the machine's rootless socket isn't up. Fix (from the machine):
+  `runuser -u user -- env XDG_RUNTIME_DIR=/run/user/1000 nohup podman system
+  service --time=0 unix:///run/user/1000/podman/podman.sock &`
+- **Image builds need `--network=host`** in the podman machine (npm registry
+  connections get ECONNREFUSED on the default network):
+  `podman build --network=host -t aisix-console:dev .`
 
-```yaml
-# ~/aisix-test/gateway.config.yaml
-resources_file: "/home/<user>/aisix-test/resources.yaml"
-proxy:
-  addr: "0.0.0.0:3000"
-admin:
-  enabled: true
-  addr: "127.0.0.1:3001"
-  admin_keys: ["admin-local-test"]
-observability:
-  metrics:
-    prometheus:
-      enabled: true
-      addr: "0.0.0.0:9090"
-```
+## Optional: GitHub Actions release builds
 
-```yaml
-# ~/aisix-test/aisix-console.yaml
-port: 8787
-bind: "127.0.0.1"
-resourcesFile: "/home/<user>/aisix-test/resources.yaml"
-aisixBin: "/home/<user>/bin/aisix"        # native Linux binary — no wrapper needed
-secretsFile: "/home/<user>/aisix-test/secrets.env"
-gateway:
-  proxy: "http://127.0.0.1:3000"
-  admin: "http://127.0.0.1:3001"
-  metrics: "http://127.0.0.1:9090"
-  adminKey: "admin-local-test"
-reloadCommand: "kill -HUP $(pgrep -f 'aisix --config') || true"   # SIGHUP works in WSL
-```
-
-Start:
-
-```bash
-cd /mnt/d/repos/aisix-console
-AISIX_CONSOLE_CONFIG=~/aisix-test/aisix-console.yaml node server/index.js &
-~/bin/aisix --config ~/aisix-test/gateway.config.yaml &
-```
-
-Open http://localhost:8787 from Windows (WSL2 mirrored networking shares
-localhost). The gateway now hot-reloads on SIGHUP after every console save.
-
-## Old "Windows compile" path (deprecated)
-
-`deploy/bin/` may also hold a Windows-built `aisix.exe` for reference. The
-Windows-host + WSL-console split needed a `wslpath` wrapper for `validate`
-(`deploy/aisix-wsl-validate.sh`) and had no hot reload — keep it only if you
-specifically want the gateway on the Windows host.
+`.github/workflows/build-aisix.yml` compiles the Linux gateway binary on GitHub
+runners and publishes it as a release/artifact (useful if you can't pull the
+image, or want a bare binary). Not needed for the container deployment.

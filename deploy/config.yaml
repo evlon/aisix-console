@@ -1,0 +1,18 @@
+# Gateway config for the container deployment (mounted at /etc/aisix/config.yaml
+# in the gateway container; resources.yaml lives next to it).
+resources_file: "/etc/aisix/resources.yaml"
+
+proxy:
+  addr: "0.0.0.0:3000"
+
+admin:
+  enabled: true
+  addr: "127.0.0.1:3002"
+  admin_keys:
+    - "admin-local-test"
+
+observability:
+  metrics:
+    prometheus:
+      enabled: true
+      addr: "0.0.0.0:9090"

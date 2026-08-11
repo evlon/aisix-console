@@ -1,0 +1,20 @@
+# Console config for the container deployment (mounted at
+# /etc/aisix-console/aisix-console.yaml in the console container).
+#
+# `resourcesFile` points at the same host file the gateway reads
+# (deploy/resources.yaml), mounted into the console at /etc/aisix-console.
+# `aisixBin` is the gateway binary baked into the console image, so every
+# save is validated against the exact binary the gateway runs.
+port: 8787
+bind: "0.0.0.0"
+resourcesFile: "/etc/aisix-console/resources.yaml"
+aisixBin: "/usr/local/bin/aisix"
+secretsFile: "/etc/aisix-console/secrets.env"
+gateway:
+  proxy: "http://127.0.0.1:3000"
+  admin: "http://127.0.0.1:3002"
+  metrics: "http://127.0.0.1:9090"
+  adminKey: "admin-local-test"
+# Containers can't send SIGHUP to each other here; reload manually with:
+#   podman kill -s HUP aisix-gw
+reloadCommand: ""

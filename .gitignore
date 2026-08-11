@@ -4,4 +4,8 @@ secrets.env
 resources.yaml
 *.tmp
 aisix-console.yaml
+deploy/resources.yaml
+deploy/aisix-console.yaml
+deploy/secrets.env
+deploy/bin/
 .DS_Store
