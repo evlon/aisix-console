@@ -10,6 +10,7 @@ bind: "0.0.0.0"
 resourcesFile: "/etc/aisix-console/resources.yaml"
 aisixBin: "/usr/local/bin/aisix"
 secretsFile: "/etc/aisix-console/secrets.env"
+authFile: "/etc/aisix-console/auth.json"
 gateway:
   proxy: "http://127.0.0.1:3000"
   admin: "http://127.0.0.1:3002"

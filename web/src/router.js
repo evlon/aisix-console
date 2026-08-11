@@ -11,5 +11,6 @@ export const router = createRouter({
     { path: '/playground', name: 'playground', component: () => import('./views/Playground.vue'), meta: { titleKey: 'app.nav.playground' } },
     { path: '/secrets', name: 'secrets', component: () => import('./views/Secrets.vue'), meta: { titleKey: 'app.nav.secrets' } },
     { path: '/raw', name: 'raw', component: () => import('./views/RawYaml.vue'), meta: { titleKey: 'app.nav.raw' } },
+    { path: '/settings', name: 'settings', component: () => import('./views/Settings.vue'), meta: { titleKey: 'app.nav.settings' } },
   ],
 });

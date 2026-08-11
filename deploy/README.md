@@ -26,6 +26,24 @@ gateway and `/etc/aisix-console` in the console), so both see the same
 - `resources.template.yaml` → `resources.yaml`
 - `aisix-console.container.yaml` → `aisix-console.yaml`
 
+## Login / security
+
+The whole console (all pages + API) is behind a password login — unauthenticated
+browsers only see the sign-in page.
+
+- **Default password**: `aisix`, created on first boot in `deploy/auth.json`
+  (persisted on the shared volume). Override the initial password with env
+  `AISIX_CONSOLE_DEFAULT_PASSWORD` before the first boot.
+- **Change it** in the console → Settings. After changing, you must sign in
+  again with the new password.
+- Sessions are signed cookies (HttpOnly, SameSite=Strict, 7-day); logging in
+  survives container restarts. Login is rate-limited (5 failures → 15 min lock).
+- `auth.json` holds only the scrypt password hash + a random session secret —
+  never the plaintext password.
+- The console still defaults to `bind: 127.0.0.1`. If you expose it beyond
+  localhost, use HTTPS in front of it (e.g. a reverse proxy) — the password
+  would otherwise travel in cleartext.
+
 ## How it fits together
 
 ```

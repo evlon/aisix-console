@@ -13,6 +13,10 @@ aisixBin: "../aisix/target/debug/aisix"
 # 控制台密钥库（Provider Key / key_env 明文只存在这里，gitignore 掉）
 secretsFile: "./secrets.env"
 
+# 登录认证文件（密码哈希 + 会话密钥）。首次启动自动创建，默认密码 aisix，
+# 登录后可在「设置」修改；也可用 AISIX_CONSOLE_DEFAULT_PASSWORD 覆盖首次密码。
+authFile: "./auth.json"
+
 gateway:
   proxy: "http://127.0.0.1:3000"     # 代理监听（试玩页转发目标）
   admin: "http://127.0.0.1:3001"     # Admin 监听（读状态用）

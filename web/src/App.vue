@@ -1,12 +1,15 @@
 <script setup>
-import { onMounted, onUnmounted, ref, useTemplateRef } from 'vue';
+import { onMounted, onUnmounted, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useStatusStore } from './stores/status.js';
+import { useAuthStore } from './stores/auth.js';
+import Login from './views/Login.vue';
 import Toast from './components/Toast.vue';
 
 const router = useRouter();
 const status = useStatusStore();
+const auth = useAuthStore();
 const { t } = useI18n();
 const toastEl = useTemplateRef('toast');
 
@@ -19,6 +22,7 @@ const nav = [
   { path: '/playground', key: 'app.nav.playground' },
   { path: '/secrets', key: 'app.nav.secrets' },
   { path: '/raw', key: 'app.nav.raw' },
+  { path: '/settings', key: 'app.nav.settings' },
 ];
 
 const stateClass = (s) =>
@@ -33,12 +37,21 @@ const stateLabel = (s) =>
     never_loaded: 'not loaded',
   }[s] || s);
 
-onMounted(() => status.startPolling());
+onMounted(() => {
+  auth.bootstrap();
+  status.startPolling();
+});
 onUnmounted(() => status.stopPolling());
 </script>
 
 <template>
-  <div style="display: flex; min-height: 100vh">
+  <div v-if="auth.checking" style="min-height: 100vh; display: flex; align-items: center; justify-content: center" class="muted">
+    {{ t('app.checking') }}
+  </div>
+
+  <Login v-else-if="!auth.authed" />
+
+  <div v-else style="display: flex; min-height: 100vh">
     <aside style="width: 200px; border-right: 1px solid var(--border); padding: 16px 12px; flex-shrink: 0">
       <div style="font-size: 16px; font-weight: 700; margin-bottom: 16px">
         AISIX <span class="muted" style="font-weight: 400">Console</span>

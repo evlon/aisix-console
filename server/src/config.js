@@ -13,6 +13,7 @@ const DEFAULTS = {
   resourcesFile: path.join(PROJECT_ROOT, 'resources.yaml'),
   aisixBin: '',
   secretsFile: path.join(PROJECT_ROOT, 'secrets.env'),
+  authFile: path.join(PROJECT_ROOT, 'auth.json'),
   gateway: {
     proxy: 'http://127.0.0.1:3000',
     admin: 'http://127.0.0.1:3001',
@@ -20,7 +21,6 @@ const DEFAULTS = {
     adminKey: '',
   },
   reloadCommand: '',
-  consoleToken: '',
 };
 
 function deepMerge(base, override) {
@@ -57,7 +57,7 @@ export function loadConfig() {
   if (process.env.AISIX_CONSOLE_RELOAD_COMMAND) {
     cfg.reloadCommand = process.env.AISIX_CONSOLE_RELOAD_COMMAND;
   }
-  if (process.env.AISIX_CONSOLE_TOKEN) cfg.consoleToken = process.env.AISIX_CONSOLE_TOKEN;
+  if (process.env.AISIX_CONSOLE_AUTH_FILE) cfg.authFile = process.env.AISIX_CONSOLE_AUTH_FILE;
 
   // Resolve relative paths against the config file's directory (or project root).
   const baseDir = fs.existsSync(configPath) ? path.dirname(configPath) : PROJECT_ROOT;
@@ -65,6 +65,7 @@ export function loadConfig() {
   cfg.resourcesFile = resolve(cfg.resourcesFile);
   cfg.aisixBin = cfg.aisixBin ? resolve(cfg.aisixBin) : '';
   cfg.secretsFile = resolve(cfg.secretsFile);
+  cfg.authFile = resolve(cfg.authFile);
   cfg.configPath = configPath;
 
   return Object.freeze(cfg);

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './src/config.js';
 import * as secrets from './src/secrets.js';
+import { initAuth } from './src/auth.js';
 import { createSaver } from './src/savePipeline.js';
 import { makeGatewayClient } from './src/gateway.js';
 import { resourcesRouter } from './src/routes/resources.js';
@@ -17,14 +18,19 @@ function buildApp(cfg) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
 
-  // Optional bearer token guarding the console itself (loopback-only by default).
-  if (cfg.consoleToken) {
-    app.use((req, res, next) => {
-      const auth = req.headers.authorization || '';
-      if (auth === `Bearer ${cfg.consoleToken}`) return next();
-      res.status(401).json({ error: '未授权' });
-    });
-  }
+  const auth = initAuth(cfg);
+
+  // Public auth endpoints (everything else under /api requires login).
+  app.post('/api/auth/login', auth.loginHandler);
+  app.post('/api/auth/logout', auth.logoutHandler);
+  app.get('/api/auth/status', auth.statusHandler);
+  app.post('/api/auth/change-password', auth.requireAuth, auth.changePasswordHandler);
+
+  // Guard the rest of the API.
+  app.use('/api', (req, res, next) => {
+    if (req.path.startsWith('/auth/')) return next();
+    auth.requireAuth(req, res, next);
+  });
 
   secrets.init(cfg.secretsFile);
   const saver = createSaver({
@@ -64,5 +70,6 @@ app.listen(cfg.port, cfg.bind, () => {
   console.log(`AISIX Console listening on http://${cfg.bind}:${cfg.port}`);
   console.log(`  resourcesFile : ${cfg.resourcesFile}`);
   console.log(`  aisixBin      : ${cfg.aisixBin || '(未配置)'}`);
+  console.log(`  authFile      : ${cfg.authFile}`);
   console.log(`  reloadCommand : ${cfg.reloadCommand || '(未配置 — 保存后需手动重载网关)'}`);
 });

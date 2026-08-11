@@ -1,4 +1,14 @@
 // fetch wrapper for /api/* — JSON in/out, throws {status, message} on non-2xx.
+// A 401 (except on auth endpoints) triggers the registered onUnauthorized
+// callback so the app can bounce to the login page.
+
+let onUnauthorized = null;
+export function setOnUnauthorized(fn) {
+  onUnauthorized = fn;
+}
+
+const AUTH_PATHS = ['/api/auth/login', '/api/auth/status', '/api/auth/logout'];
+
 async function request(url, options = {}) {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -14,12 +24,25 @@ async function request(url, options = {}) {
     const err = new Error(data?.error || data?.message || `HTTP ${res.status}`);
     err.status = res.status;
     err.data = data;
+    if (res.status === 401 && !AUTH_PATHS.includes(url) && onUnauthorized) {
+      onUnauthorized();
+    }
     throw err;
   }
   return data;
 }
 
 export const api = {
+  // auth
+  authStatus: () => request('/api/auth/status'),
+  login: (password) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  logout: () => request('/api/auth/logout', { method: 'POST' }),
+  changePassword: (current_password, new_password) =>
+    request('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   status: () => request('/api/status'),
   raw: () => request('/api/raw'),
 
