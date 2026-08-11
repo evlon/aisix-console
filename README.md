@@ -22,14 +22,25 @@ Node.js（Express）后端 + Vue 3 / Vite 前端（vue-i18n 双语），npm work
 **网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 从 `evlon/aisix` fork 编译网关，见 `.github/workflows/build-image.yml`），一个容器同时跑两个进程。保存配置后**自动热重载网关**，新增密钥也即改即生效，无需任何手动步骤。详见 **[deploy/README.md](deploy/README.md)**。
 
 ```bash
-docker pull ghcr.io/evlon/aisix-console:latest
-bash deploy/run.sh          # 种子数据目录 + docker run（或 docker compose -f deploy/docker-compose.yml up -d）
-# 打开 http://localhost:8787  →  登录（默认 aisix）
+# 全新服务器一键安装：
+curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/install.sh | sh
+
+# 或已有代码：docker pull + bash deploy/run.sh
 ```
 
-- 端口：代理 `:3000`、admin `:3002`（3001 被本机其他工具占用）、metrics `:9090`、控制台 `:8787`
+国内/改端口示例（env 覆盖）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/install.sh | \
+  AISIX_IMAGE=ghcr.nju.edu.cn/evlon/aisix-console:latest \   # ghcr 镜像加速
+  AISIX_PROXY=http://127.0.0.1:7890 \                        # 代理（脚本下载 + podman 拉镜像）
+  AISIX_CONSOLE_PORT=8888 AISIX_PROXY_PORT=4000 \            # 自定义宿主机端口，规避冲突
+  sh
+```
+
+- 端口：代理 `:3000`、admin `:3002`、metrics `:9090`、控制台 `:8787`（均可通过 `AISIX_*_PORT` 覆盖宿主机映射）
 - 数据目录（挂载 `/etc/aisix`）：`config.yaml`、`resources.yaml`、`aisix-console.yaml`、`auth.json`、`secrets.env`，容器重建后保留
-- **热重载**：控制台保存后自动 `kill -HUP $(cat /run/aisix.pid)` 同容器生效
+- **热重载**：控制台保存后自动 `sh /usr/local/bin/gw-hup.sh` 同容器生效
 - **更新**：`docker pull` 新镜像 → 重建容器（`bash deploy/run.sh`），数据保留
 
 ## 本地 Node 开发/运行

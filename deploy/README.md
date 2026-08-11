@@ -23,8 +23,44 @@ podman build --network=host -t aisix-console:dev .   # --network=host: npm regis
 
 ## Run
 
+**Fresh server (one-liner):**
+
 ```bash
-bash deploy/run.sh                 # seeds ~/aisix-data, then docker run
+curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/install.sh | sh
+```
+
+`install.sh` fetches the deploy scripts + config templates into
+`~/aisix-console-deploy`, seeds the data dir (`~/aisix-data`), and starts the
+container. It never overwrites existing data; env overrides:
+`AISIX_INSTALL_BASE_URL` / `AISIX_IMAGE` / `AISIX_PROXY` / `AISIX_DATA_DIR` /
+`AISIX_DEPLOY_DIR` / `AISIX_RUNNER` / `AISIX_PROXY_PORT` / `AISIX_ADMIN_PORT` /
+`AISIX_METRICS_PORT` / `AISIX_CONSOLE_PORT` / `AISIX_NO_START=1`. Note: the
+repo must be **public** for the raw.githubusercontent URL to work.
+
+**China-friendly examples:**
+
+```bash
+# use a ghcr mirror + proxy + different ports to avoid conflicts
+curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/install.sh | \
+  AISIX_IMAGE=ghcr.nju.edu.cn/evlon/aisix-console:latest \
+  AISIX_PROXY=http://127.0.0.1:7890 \
+  AISIX_CONSOLE_PORT=8888 \
+  sh
+```
+
+- `AISIX_PROXY` (or `HTTPS_PROXY`/`HTTP_PROXY`): used by curl for the script
+  fetch and by **podman** for image pulls. The **docker daemon** does not use
+  CLI proxy env — if `docker pull` fails behind a proxy, `run.sh` prints the
+  systemd drop-in config to set the daemon proxy (or point `AISIX_IMAGE` at a
+  ghcr mirror).
+- Port overrides only change the **host** mapping (`-p host:container`); the
+  container's internal ports stay fixed, so the console keeps talking to the
+  gateway on 127.0.0.1 regardless.
+
+**From a clone (or after install.sh):**
+
+```bash
+bash deploy/run.sh                 # seeds ~/aisix-data, then docker/podman run
 # or
 docker compose -f deploy/docker-compose.yml up -d
 ```

@@ -1,13 +1,14 @@
 # Single-container deployment: AISIX gateway + web console in one image.
+# Ports are overridable via env (same vars as run.sh / install.sh).
 services:
   aisix:
-    image: ghcr.io/evlon/aisix-console:latest
+    image: ${AISIX_IMAGE:-ghcr.io/evlon/aisix-console:latest}
     container_name: aisix
     ports:
-      - "3000:3000"   # proxy
-      - "3002:3002"   # admin (3001 is used by other tooling on this machine)
-      - "9090:9090"   # metrics/status
-      - "8787:8787"   # console UI
+      - "${AISIX_PROXY_PORT:-3000}:3000"    # proxy
+      - "${AISIX_ADMIN_PORT:-3002}:3002"    # admin (3001 avoided by default)
+      - "${AISIX_METRICS_PORT:-9090}:9090"  # metrics/status
+      - "${AISIX_CONSOLE_PORT:-8787}:8787"  # console UI
     volumes:
       - ./aisix-data:/etc/aisix
     restart: unless-stopped
