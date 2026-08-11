@@ -59,7 +59,7 @@ fi
 
 mkdir -p "$TARGET_DIR" "$DATA_DIR"
 
-for f in run.sh config.yaml aisix-console.yaml resources.template.yaml docker-compose.yml; do
+for f in run.sh config.yaml aisix-console.example.yaml resources.template.yaml docker-compose.yml; do
   say "fetching $f"
   curl -fsSL "$BASE_URL/$f" -o "$TARGET_DIR/$f"
 done
@@ -67,7 +67,7 @@ chmod +x "$TARGET_DIR/run.sh"
 
 # Seed the data dir — never overwrite existing config/data.
 [ -f "$DATA_DIR/config.yaml" ] || cp "$TARGET_DIR/config.yaml" "$DATA_DIR/config.yaml"
-[ -f "$DATA_DIR/aisix-console.yaml" ] || cp "$TARGET_DIR/aisix-console.yaml" "$DATA_DIR/aisix-console.yaml"
+[ -f "$DATA_DIR/aisix-console.yaml" ] || cp "$TARGET_DIR/aisix-console.example.yaml" "$DATA_DIR/aisix-console.yaml"
 [ -f "$DATA_DIR/resources.yaml" ] || cp "$TARGET_DIR/resources.template.yaml" "$DATA_DIR/resources.yaml"
 
 say "deploy scripts: $TARGET_DIR"

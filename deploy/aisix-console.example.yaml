@@ -1,0 +1,33 @@
+# AISIX Console 配置示例（单容器部署，挂载到 /etc/aisix/aisix-console.yaml）。
+# 由 install.sh 抓取并落盘为 aisix-console.yaml；已提交，不含密钥。
+#
+# 控制台与网关同处一个容器，保存配置后通过 gw-hup.sh 给网关发 SIGHUP 热重载，
+# 无需手动重启或重建容器。
+
+port: 8787
+bind: "0.0.0.0"
+
+# 网关的 resources.yaml 路径（容器内文件模式，挂载在 /etc/aisix）
+resourcesFile: "/etc/aisix/resources.yaml"
+
+# aisix 二进制路径（保存时用 `aisix validate --resources` 校验）
+aisixBin: "/usr/local/bin/aisix"
+
+# 密钥库（Provider Key 已改明文直写 resources.yaml，此处一般留默认）
+secretsFile: "/etc/aisix/secrets.env"
+
+# 登录认证文件（密码哈希 + 会话密钥）。首次启动自动创建，默认密码 aisix，
+# 登录后可在「设置」修改；也可用 CONSOLE_DEFAULT_PASSWORD 覆盖首次密码。
+authFile: "/etc/aisix/auth.json"
+
+# 试玩请求超时（毫秒），防止上游挂起时界面一直「发送中」
+playgroundTimeoutMs: 180000
+
+gateway:
+  proxy: "http://127.0.0.1:3000"     # 代理监听（试玩页转发目标）
+  admin: "http://127.0.0.1:3002"      # Admin 监听（读状态用）
+  metrics: "http://127.0.0.1:9090"   # Metrics/status 监听（状态看板）
+  adminKey: ""                        # 可选：admin_keys 中的某个 key，用于 /admin/v1/health
+
+# 同 PID 命名空间：每次保存成功后给网关发 SIGHUP 热重载。
+reloadCommand: "sh /usr/local/bin/gw-hup.sh"

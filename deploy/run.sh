@@ -50,7 +50,7 @@ fi
 
 mkdir -p "$DATA_DIR"
 [ -f "$DATA_DIR/config.yaml" ] || cp "$SCRIPT_DIR/config.yaml" "$DATA_DIR/config.yaml"
-[ -f "$DATA_DIR/aisix-console.yaml" ] || cp "$SCRIPT_DIR/aisix-console.yaml" "$DATA_DIR/aisix-console.yaml"
+[ -f "$DATA_DIR/aisix-console.yaml" ] || cp "$SCRIPT_DIR/aisix-console.example.yaml" "$DATA_DIR/aisix-console.yaml"
 [ -f "$DATA_DIR/resources.yaml" ] || cp "$SCRIPT_DIR/resources.template.yaml" "$DATA_DIR/resources.yaml"
 
 # --- image acquisition ----------------------------------------------------
