@@ -53,7 +53,7 @@ npm start
 
 ## 密钥接线（重要）
 
-控制台把 Provider Key 明文存在 `secrets.env`，resources.yaml 只写 `${AISIX_CONSOLE_PK_xxx}`。
+控制台把 Provider Key 明文存在 `secrets.env`，resources.yaml 只写 `${CONSOLE_PK_xxx}`。
 要让网关真正使用，需要把 `secrets.env` 注入网关进程环境：
 
 - **Docker**：`docker run --env-file ./secrets.env ...`（或 `-e VAR=...`）

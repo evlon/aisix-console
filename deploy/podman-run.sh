@@ -34,9 +34,21 @@ done
 # Host networking is used deliberately: custom netavark networks hit an
 # nftables failure in the podman-machine VM ("netavark: nftables error"), and
 # host networking lets the console reach the gateway at 127.0.0.1.
+#
+# The gateway needs the console keystore injected as env vars so ${VAR}
+# references in resources.yaml resolve (the console injects them into
+# `aisix validate`; the gateway needs them at load time too).
+GW_ENV_ARGS=()
+if [ -f "$DEPLOY_DIR/secrets.env" ]; then
+  GW_ENV_ARGS=(--env-file "$DEPLOY_DIR_WIN/secrets.env")
+  echo "== gateway env: injecting $DEPLOY_DIR/secrets.env =="
+else
+  echo "== gateway env: no secrets.env (${VAR} refs will fail) =="
+fi
+
 echo "== gateway container =="
 podman rm -f aisix-gw >/dev/null 2>&1 || true
-podman run -d --name aisix-gw --network=host \
+podman run -d --name aisix-gw --network=host "${GW_ENV_ARGS[@]}" \
   -v "$DEPLOY_DIR_WIN":/etc/aisix:rw \
   "$IMAGE_GW"
 

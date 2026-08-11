@@ -97,7 +97,7 @@ async function save() {
 
 async function allocateProviderVar(displayName, value) {
   const slug = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'KEY';
-  const name = `AISIX_CONSOLE_PK_${slug}`;
+  const name = `CONSOLE_PK_${slug}`;
   await api.setSecret(name, value);
   return name;
 }

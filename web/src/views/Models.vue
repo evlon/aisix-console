@@ -528,14 +528,21 @@ onMounted(load);
         </div>
         <div class="form-row full">
           <label style="text-align: left">{{ t('models.rateLimit') }}</label>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px">
-            <input v-model="form.common.rps" placeholder="rps" />
-            <input v-model="form.common.rpm" placeholder="rpm" />
-            <input v-model="form.common.rph" placeholder="rph" />
-            <input v-model="form.common.rpd" placeholder="rpd" />
-            <input v-model="form.common.tpm" placeholder="tpm" />
-            <input v-model="form.common.tpd" placeholder="tpd" />
-            <input v-model="form.common.concurrency" :placeholder="t('models.concurrency')" />
+          <div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px">
+              <input v-model="form.common.rps" :placeholder="t('models.rlRps')" />
+              <input v-model="form.common.rpm" :placeholder="t('models.rlRpm')" />
+              <input v-model="form.common.rph" :placeholder="t('models.rlRph')" />
+              <input v-model="form.common.rpd" :placeholder="t('models.rlRpd')" />
+              <input v-model="form.common.tpm" :placeholder="t('models.rlTpm')" />
+              <input v-model="form.common.tpd" :placeholder="t('models.rlTpd')" />
+              <input
+                v-model="form.common.concurrency"
+                :placeholder="t('models.rlConcurrency')"
+                style="grid-column: 1 / -1"
+              />
+            </div>
+            <div class="muted" style="font-size: 12px; margin-top: 6px">{{ t('models.rateLimitHint') }}</div>
           </div>
         </div>
         <div class="form-row">
