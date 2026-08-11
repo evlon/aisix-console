@@ -50,9 +50,13 @@ curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/ins
 
 - `AISIX_PROXY` (or `HTTPS_PROXY`/`HTTP_PROXY`): used by curl for the script
   fetch and by **podman** for image pulls. The **docker daemon** does not use
-  CLI proxy env — if `docker pull` fails behind a proxy, `run.sh` prints the
-  systemd drop-in config to set the daemon proxy (or point `AISIX_IMAGE` at a
-  ghcr mirror).
+  CLI proxy env — run.sh handles that three ways:
+  1. **skopeo** (recommended): `apt/dnf/brew install skopeo`. skopeo transfers
+     the image itself, honours the proxy env, and loads straight into
+     docker/podman storage. run.sh uses it automatically for `docker` behind a
+     proxy, or on any pull failure; force it with `AISIX_SKOPEO=1`.
+  2. Configure the docker daemon proxy (run.sh prints the systemd drop-in).
+  3. Point `AISIX_IMAGE` at a ghcr mirror (e.g. `ghcr.nju.edu.cn/...`).
 - Port overrides only change the **host** mapping (`-p host:container`); the
   container's internal ports stay fixed, so the console keeps talking to the
   gateway on 127.0.0.1 regardless.

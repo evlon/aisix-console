@@ -7,7 +7,9 @@
 #   AISIX_DATA_DIR           data dir mounted at /etc/aisix (default: ~/aisix-data)
 #   AISIX_RUNNER             docker | podman (default: autodetect)
 #   AISIX_PROXY              proxy for image pulls, e.g. http://127.0.0.1:7890
-#                            (podman uses it; for docker see the note below)
+#                            (podman uses it; docker daemon does not — run.sh
+#                            then uses skopeo automatically if installed)
+#   AISIX_SKOPEO=1           force skopeo for the image fetch
 #   AISIX_PROXY_PORT         host port for the proxy :3000 (default 3000)
 #   AISIX_ADMIN_PORT         host port for admin :3002 (default 3002)
 #   AISIX_METRICS_PORT       host port for metrics :9090 (default 9090)
@@ -51,21 +53,71 @@ mkdir -p "$DATA_DIR"
 [ -f "$DATA_DIR/aisix-console.yaml" ] || cp "$SCRIPT_DIR/aisix-console.yaml" "$DATA_DIR/aisix-console.yaml"
 [ -f "$DATA_DIR/resources.yaml" ] || cp "$SCRIPT_DIR/resources.template.yaml" "$DATA_DIR/resources.yaml"
 
-if ! "$RUNNER" image exists "$IMAGE" 2>/dev/null; then
-  if ! "$RUNNER" pull "$IMAGE"; then
-    if [ -n "$PROXY" ] && [ "$RUNNER" = "docker" ]; then
-      echo "docker pull failed. The docker daemon does NOT use the CLI proxy." >&2
-      echo "Configure the daemon proxy, e.g.:" >&2
-      echo "  sudo mkdir -p /etc/systemd/system/docker.service.d && sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf >/dev/null <<EOF" >&2
-      echo "  [Service]" >&2
-      echo "  Environment=\"HTTP_PROXY=$PROXY\" \"HTTPS_PROXY=$PROXY\" \"NO_PROXY=localhost,127.0.0.1\"" >&2
-      echo "  EOF" >&2
-      echo "  sudo systemctl daemon-reload && sudo systemctl restart docker" >&2
-      echo "or use AISIX_IMAGE to point at a ghcr mirror (e.g. ghcr.nju.edu.cn/evlon/aisix-console)." >&2
+# --- image acquisition ----------------------------------------------------
+# Preferred: `$RUNNER pull` (podman honours the proxy env; docker daemon does
+# not). Alternative: **skopeo** — it transfers the image itself, respects
+# HTTP(S)_PROXY, and loads straight into the docker/podman storage. That makes
+# it the cleanest proxy-friendly path for the docker daemon.
+skopeo_copy() {
+  local dest
+  case "$RUNNER" in
+    docker) dest="docker-daemon:$IMAGE" ;;
+    podman) dest="containers-storage:$IMAGE" ;;
+  esac
+  echo "skopeo copy docker://$IMAGE -> $dest"
+  skopeo copy "docker://$IMAGE" "$dest"
+}
+
+skopeo_hint() {
+  echo "Install skopeo (apt/dnf/brew install skopeo), then rerun — run.sh will" >&2
+  echo "use it to fetch the image through the proxy." >&2
+}
+
+fetch_image() {
+  "$RUNNER" image exists "$IMAGE" 2>/dev/null && return 0
+  # Force skopeo via AISIX_SKOPEO=1; also prefer it for docker+proxy (the
+  # daemon ignores CLI proxy env, so a plain pull would fail behind a proxy).
+  if [ "${AISIX_SKOPEO:-0}" = "1" ] || { [ -n "$PROXY" ] && [ "$RUNNER" = "docker" ]; }; then
+    if command -v skopeo >/dev/null 2>&1; then
+      skopeo_copy && return 0
+      echo "skopeo copy failed" >&2
+      skopeo_hint
+      exit 1
     fi
+    if [ "${AISIX_SKOPEO:-0}" = "1" ]; then
+      echo "AISIX_SKOPEO=1 but skopeo is not installed" >&2
+      skopeo_hint
+      exit 1
+    fi
+  fi
+  if "$RUNNER" pull "$IMAGE"; then return 0; fi
+  # Fallback: pull failed — try skopeo if present.
+  if command -v skopeo >/dev/null 2>&1; then
+    echo "pull failed — falling back to skopeo" >&2
+    skopeo_copy && return 0
+    echo "skopeo copy failed" >&2
+    skopeo_hint
     exit 1
   fi
-fi
+  if [ -n "$PROXY" ] && [ "$RUNNER" = "docker" ]; then
+    echo "docker pull failed. The docker daemon does NOT use the CLI proxy." >&2
+    echo "Either install skopeo (the run.sh will use it automatically), or configure" >&2
+    echo "the daemon proxy, e.g.:" >&2
+    echo "  sudo mkdir -p /etc/systemd/system/docker.service.d && sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf >/dev/null <<EOF" >&2
+    echo "  [Service]" >&2
+    echo "  Environment=\"HTTP_PROXY=$PROXY\" \"HTTPS_PROXY=$PROXY\" \"NO_PROXY=localhost,127.0.0.1\"" >&2
+    echo "  EOF" >&2
+    echo "  sudo systemctl daemon-reload && sudo systemctl restart docker" >&2
+    echo "or use AISIX_IMAGE to point at a ghcr mirror (e.g. ghcr.nju.edu.cn/evlon/aisix-console)." >&2
+  else
+    echo "failed to fetch image: $IMAGE" >&2
+    echo "check network/registry, or install skopeo (apt/dnf/brew install skopeo)" >&2
+    echo "and rerun — run.sh will fetch the image through the proxy." >&2
+  fi
+  exit 1
+}
+
+fetch_image
 
 "$RUNNER" rm -f aisix >/dev/null 2>&1 || true
 "$RUNNER" run -d --name aisix \

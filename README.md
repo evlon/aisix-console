@@ -38,6 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/evlon/aisix-console/main/deploy/ins
   sh
 ```
 
+> docker daemon 不走 CLI 代理：如果 `docker pull` 拉取失败，**安装 skopeo**（`apt/dnf/brew install skopeo`）后重跑即可 —— run.sh 会自动用 skopeo 走代理拉镜像并灌入 docker 存储（`AISIX_SKOPEO=1` 可强制）。
+
 - 端口：代理 `:3000`、admin `:3002`、metrics `:9090`、控制台 `:8787`（均可通过 `AISIX_*_PORT` 覆盖宿主机映射）
 - 数据目录（挂载 `/etc/aisix`）：`config.yaml`、`resources.yaml`、`aisix-console.yaml`、`auth.json`、`secrets.env`，容器重建后保留
 - **热重载**：控制台保存后自动 `sh /usr/local/bin/gw-hup.sh` 同容器生效

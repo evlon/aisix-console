@@ -13,6 +13,7 @@
 #                            in China use a ghcr mirror, e.g. ghcr.nju.edu.cn/evlon/aisix-console)
 #   AISIX_PROXY              proxy for downloads, e.g. http://127.0.0.1:7890
 #                            (also honours HTTPS_PROXY / HTTP_PROXY)
+#   AISIX_SKOPEO=1           force skopeo for the image fetch (see run.sh)
 #   AISIX_DATA_DIR           data dir mounted at /etc/aisix (default: ~/aisix-data)
 #   AISIX_DEPLOY_DIR         where the scripts go (default: ~/aisix-console-deploy)
 #   AISIX_RUNNER             docker | podman (default: autodetect)
@@ -49,6 +50,11 @@ if [ -n "$PROXY" ]; then
   export HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY" ALL_PROXY="$PROXY"
   export NO_PROXY="localhost,127.0.0.1,${NO_PROXY:-}"
   say "proxy: $PROXY"
+  if [ "$RUNNER" = "docker" ] && ! command -v skopeo >/dev/null 2>&1; then
+    say "tip: if docker pull fails behind the proxy, install skopeo"
+    say "    (apt/dnf/brew install skopeo) and rerun — run.sh will use it"
+    say "    to fetch the image through the proxy."
+  fi
 fi
 
 mkdir -p "$TARGET_DIR" "$DATA_DIR"
@@ -76,6 +82,7 @@ AISIX_RUNNER="$RUNNER" \
 AISIX_IMAGE="$IMAGE" \
 AISIX_DATA_DIR="$DATA_DIR" \
 AISIX_PROXY="$PROXY" \
+AISIX_SKOPEO="${AISIX_SKOPEO:-0}" \
 AISIX_PROXY_PORT="${AISIX_PROXY_PORT:-3000}" \
 AISIX_ADMIN_PORT="${AISIX_ADMIN_PORT:-3002}" \
 AISIX_METRICS_PORT="${AISIX_METRICS_PORT:-9090}" \
