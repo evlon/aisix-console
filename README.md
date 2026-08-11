@@ -17,27 +17,22 @@
 
 Node.js（Express）后端 + Vue 3 / Vite 前端（vue-i18n 双语），npm workspaces 单仓库，生产模式后端托管构建产物。
 
-## 部署方式一：容器部署（推荐）
+## 部署（单容器，推荐）
 
-网关跑官方镜像 `ghcr.io/api7/aisix:0.8.1`，控制台由本仓库 `Dockerfile` 构建（镜像内自带网关二进制用于 validate）。详见 **[deploy/README.md](deploy/README.md)**。
+**网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 从 `evlon/aisix` fork 编译网关，见 `.github/workflows/build-image.yml`），一个容器同时跑两个进程。保存配置后**自动热重载网关**，新增密钥也即改即生效，无需任何手动步骤。详见 **[deploy/README.md](deploy/README.md)**。
 
 ```bash
-export PATH="$PATH:/c/Users/niukl/AppData/Local/Programs/Podman"   # Windows
-podman machine start                       # 若机器没启动
-podman pull ghcr.io/api7/aisix:0.8.1
-podman build --network=host -t aisix-console:dev .    # 构建需 --network=host（见 deploy/README）
-bash deploy/podman-run.sh                  # 幂等：创建/重建 aisix-gw + aisix-console
+docker pull ghcr.io/evlon/aisix-console:latest
+bash deploy/run.sh          # 种子数据目录 + docker run（或 docker compose -f deploy/docker-compose.yml up -d）
 # 打开 http://localhost:8787  →  登录（默认 aisix）
 ```
 
-- 网关端口：代理 `:3000`、admin `:3002`（3001 被 Tabby 占用）、metrics `:9090`
-- 保存配置后热重载：`podman kill -s HUP aisix-gw`
-- `deploy/` 目录挂载进两个容器共享 `resources.yaml`；`auth.json`、`secrets.env` 都持久化在 `deploy/`
-- 密钥注入：`deploy/podman-run.sh` 会自动给网关容器加 `--env-file deploy/secrets.env`
+- 端口：代理 `:3000`、admin `:3002`（3001 被本机其他工具占用）、metrics `:9090`、控制台 `:8787`
+- 数据目录（挂载 `/etc/aisix`）：`config.yaml`、`resources.yaml`、`aisix-console.yaml`、`auth.json`、`secrets.env`，容器重建后保留
+- **热重载**：控制台保存后自动 `kill -HUP $(cat /run/aisix.pid)` 同容器生效
+- **更新**：`docker pull` 新镜像 → 重建容器（`bash deploy/run.sh`），数据保留
 
-也可在 GitHub Actions 上编译 Linux 版网关二进制并发布 Release（工作流见 `.github/workflows/build-aisix.yml`，推送 `v*` tag 触发）。
-
-## 部署方式二：本地 Node 开发/运行
+## 本地 Node 开发/运行
 
 要求：Node 20+；`aisix` 二进制（用于 validate，在 `../aisix/target/debug/aisix` 或自行配置）。
 
@@ -63,7 +58,7 @@ npm start
 
 ## 登录认证
 
-- 首次启动自动创建 `auth.json`（含密码哈希 + 随机会话密钥），默认密码 **`aisix`**；可用 env `AISIX_CONSOLE_DEFAULT_PASSWORD` 覆盖首次密码
+- 首次启动自动创建 `auth.json`（含密码哈希 + 随机会话密钥），默认密码 **`aisix`**；可用 env `CONSOLE_DEFAULT_PASSWORD` 覆盖首次密码
 - 登录后在「设置」页修改密码；改密后需重新登录
 - 会话为签名 Cookie（HttpOnly、SameSite=Strict、7 天），重启容器/服务后登录态保持
 - 登录限流：5 次失败锁定 15 分钟
@@ -79,27 +74,24 @@ npm start
 | `authFile` | 登录认证文件 auth.json 路径（首次启动自动创建） |
 | `gateway.proxy/admin/metrics` | 网关三个监听地址 |
 | `gateway.adminKey` | 可选，Admin API key（状态页 /health 用） |
-| `reloadCommand` | 保存后重载命令；留空则提示手动重载 |
+| `playgroundTimeoutMs` | 试玩请求超时（毫秒），防上游挂起卡死界面 |
+| `reloadCommand` | 保存后重载命令；单容器部署用 `kill -HUP $(cat /run/aisix.pid)`；留空则提示手动重载 |
 
-环境变量覆盖：`AISIX_CONSOLE_PORT`、`AISIX_CONSOLE_BIND`、`AISIX_CONSOLE_RESOURCES_FILE`、`AISIX_CONSOLE_AISIX_BIN`、`AISIX_CONSOLE_AUTH_FILE`、`AISIX_CONSOLE_RELOAD_COMMAND`、`AISIX_CONSOLE_CONFIG`、`AISIX_CONSOLE_DEFAULT_PASSWORD`。
+环境变量覆盖：`CONSOLE_PORT`、`CONSOLE_BIND`、`CONSOLE_RESOURCES_FILE`、`CONSOLE_AISIX_BIN`、`CONSOLE_AUTH_FILE`、`CONSOLE_RELOAD_COMMAND`、`CONSOLE_PLAYGROUND_TIMEOUT_MS`、`CONSOLE_CONFIG`、`CONSOLE_DEFAULT_PASSWORD`。
 
-## 密钥接线（重要）
+## 密钥接线
 
-控制台把上游密钥明文存在 `secrets.env`，resources.yaml 只写 `${CONSOLE_PK_xxx}`。要让网关使用：
-
-- **容器部署**：`deploy/podman-run.sh` 已自动给网关容器注入 `secrets.env`（`--env-file`）
-- **Docker**：`docker run --env-file ./secrets.env ...`
-- **systemd**：`EnvironmentFile=/path/to/secrets.env`
-- **手动**：`set -a; . secrets.env; set +a` 后再启动 aisix
-
-⚠️ **密钥变量名不能以 `AISIX_` 开头**：aisix 网关会把所有 `AISIX_*` 环境变量当作配置覆盖（`unknown field ...` 直接启动失败）。控制台统一使用 `CONSOLE_PK_` / `CONSOLE_CK_` 前缀。
+- **推荐（单容器）**：Provider Key 的 `api_key` **明文直写** resources.yaml，保存后自动热重载生效，无需任何环境变量注入，也无需重建容器
+- **引用已有环境变量**（高级）：写 `${VAR}` 到 resources.yaml，需自行把变量注入网关进程环境（`docker run -e` / `--env-file` / systemd `EnvironmentFile`）
+- ⚠️ 环境变量名不能以 `AISIX_` 开头：aisix 网关会把所有 `AISIX_*` 环境变量当作配置覆盖（`unknown field ...` 直接启动失败）。若用引用模式，请用 `CONSOLE_*` 等非 `AISIX_` 前缀
+- 调用方密钥（caller key）仍只存 SHA-256 哈希，明文仅创建时显示一次
 
 ## 重载
 
 保存配置后，`aisix validate` 通过即写文件并执行 `reloadCommand`：
 
-- 容器（Linux）：`podman kill -s HUP aisix-gw`
-- Docker (Linux)：`docker kill -s HUP aisix`
+- **单容器（推荐）**：`kill -HUP $(cat /run/aisix.pid)` —— 已内置在 `deploy/aisix-console.yaml`，保存即自动生效
+- Docker（网关独立容器）：`docker kill -s HUP aisix`
 - systemd：`systemctl reload aisix`
 - Linux 原生：`kill -HUP <pid>`
 - **Windows 原生：网关不支持 SIGHUP（`file_reload_loop` 仅 unix），改配置后必须重启网关** —— 此时 `reloadCommand` 留空，控制台会提示手动重启
@@ -120,7 +112,8 @@ web/             Vue 3 前端
   src/stores/         status（网关轮询）+ auth（登录态）
   src/views/          Login · Settings · Dashboard · ProviderKeys · Models · ApiKeys · Policies · Playground · Secrets · RawYaml
   src/lib/            keygen + sha256（浏览器端生成/哈希调用方密钥）
-deploy/          容器部署：Dockerfile、podman-run.sh、config/resources 模板、README
+deploy/          单容器部署：Dockerfile、entrypoint、run.sh、compose、config/resources 模板、README
+docker/          supervisor 入口（同时拉起网关 + 控制台）
 ```
 
 ## 注意

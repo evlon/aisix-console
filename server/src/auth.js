@@ -49,7 +49,8 @@ export function initAuth(cfg) {
     state = { authFile, ...raw };
   } else {
     const passwordSalt = crypto.randomBytes(16).toString('hex');
-    const defaultPassword = process.env.AISIX_CONSOLE_DEFAULT_PASSWORD || 'aisix';
+    const defaultPassword =
+      process.env.CONSOLE_DEFAULT_PASSWORD || process.env.AISIX_CONSOLE_DEFAULT_PASSWORD || 'aisix';
     state = {
       authFile,
       password_salt: passwordSalt,

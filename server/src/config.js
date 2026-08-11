@@ -39,7 +39,9 @@ function deepMerge(base, override) {
 
 export function loadConfig() {
   const configPath =
-    process.env.AISIX_CONSOLE_CONFIG || path.join(PROJECT_ROOT, 'aisix-console.yaml');
+    process.env.CONSOLE_CONFIG ||
+    process.env.AISIX_CONSOLE_CONFIG ||
+    path.join(PROJECT_ROOT, 'aisix-console.yaml');
   let fileCfg = {};
   if (fs.existsSync(configPath)) {
     const text = fs.readFileSync(configPath, 'utf8');
@@ -48,20 +50,25 @@ export function loadConfig() {
 
   const cfg = deepMerge(DEFAULTS, fileCfg);
 
-  // Env overrides
-  if (process.env.AISIX_CONSOLE_PORT) cfg.port = Number(process.env.AISIX_CONSOLE_PORT);
-  if (process.env.AISIX_CONSOLE_BIND) cfg.bind = process.env.AISIX_CONSOLE_BIND;
-  if (process.env.AISIX_CONSOLE_RESOURCES_FILE) {
-    cfg.resourcesFile = process.env.AISIX_CONSOLE_RESOURCES_FILE;
+  // Env overrides. CONSOLE_* is the canonical name (shared-container safe:
+  // the aisix gateway treats any AISIX_* var as a config override); the old
+  // AISIX_CONSOLE_* spellings are kept as fallback for local setups.
+  if (process.env.CONSOLE_PORT || process.env.AISIX_CONSOLE_PORT) {
+    cfg.port = Number(process.env.CONSOLE_PORT || process.env.AISIX_CONSOLE_PORT);
   }
-  if (process.env.AISIX_CONSOLE_AISIX_BIN) cfg.aisixBin = process.env.AISIX_CONSOLE_AISIX_BIN;
-  if (process.env.AISIX_CONSOLE_RELOAD_COMMAND) {
-    cfg.reloadCommand = process.env.AISIX_CONSOLE_RELOAD_COMMAND;
+  if (process.env.CONSOLE_BIND || process.env.AISIX_CONSOLE_BIND) {
+    cfg.bind = process.env.CONSOLE_BIND || process.env.AISIX_CONSOLE_BIND;
   }
-  if (process.env.AISIX_CONSOLE_AUTH_FILE) cfg.authFile = process.env.AISIX_CONSOLE_AUTH_FILE;
-  if (process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS) {
-    cfg.playgroundTimeoutMs = Number(process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS);
-  }
+  const envResFile = process.env.CONSOLE_RESOURCES_FILE || process.env.AISIX_CONSOLE_RESOURCES_FILE;
+  if (envResFile) cfg.resourcesFile = envResFile;
+  const envAisixBin = process.env.CONSOLE_AISIX_BIN || process.env.AISIX_CONSOLE_AISIX_BIN;
+  if (envAisixBin) cfg.aisixBin = envAisixBin;
+  const envReload = process.env.CONSOLE_RELOAD_COMMAND || process.env.AISIX_CONSOLE_RELOAD_COMMAND;
+  if (envReload) cfg.reloadCommand = envReload;
+  const envAuth = process.env.CONSOLE_AUTH_FILE || process.env.AISIX_CONSOLE_AUTH_FILE;
+  if (envAuth) cfg.authFile = envAuth;
+  const envPg = process.env.CONSOLE_PLAYGROUND_TIMEOUT_MS || process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS;
+  if (envPg) cfg.playgroundTimeoutMs = Number(envPg);
 
   // Resolve relative paths against the config file's directory (or project root).
   const baseDir = fs.existsSync(configPath) ? path.dirname(configPath) : PROJECT_ROOT;

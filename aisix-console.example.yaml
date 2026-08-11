@@ -10,23 +10,27 @@ resourcesFile: "../aisix/resources.yaml"
 # aisix 二进制路径（用于 `aisix validate --resources` 校验）
 aisixBin: "../aisix/target/debug/aisix"
 
-# 控制台密钥库（Provider Key / key_env 明文只存在这里，gitignore 掉）。
-# 密钥变量名统一用 CONSOLE_PK_ / CONSOLE_CK_ 前缀——不能以 AISIX_ 开头，
-# 否则 aisix 网关会把它当作配置覆盖导致启动失败。
+# 调用方 key_env 引用模式的明文存放处（gitignore 掉）。
+# Provider Key 已改为明文直写 resources.yaml，不再依赖 secrets.env。
 secretsFile: "./secrets.env"
 
 # 登录认证文件（密码哈希 + 会话密钥）。首次启动自动创建，默认密码 aisix，
-# 登录后可在「设置」修改；也可用 AISIX_CONSOLE_DEFAULT_PASSWORD 覆盖首次密码。
+# 登录后可在「设置」修改；也可用 CONSOLE_DEFAULT_PASSWORD 覆盖首次密码。
 authFile: "./auth.json"
+
+# 试玩请求超时（毫秒），防止上游挂起时界面一直「发送中」
+playgroundTimeoutMs: 180000
 
 gateway:
   proxy: "http://127.0.0.1:3000"     # 代理监听（试玩页转发目标）
-  admin: "http://127.0.0.1:3001"     # Admin 监听（读状态用）
+  admin: "http://127.0.0.1:3002"     # Admin 监听（读状态用）
   metrics: "http://127.0.0.1:9090"   # Metrics/status 监听（状态看板）
   adminKey: ""                       # 可选：admin_keys 中的某个 key，用于 /admin/v1/health
 
 # 保存成功后执行的重载命令。为空 = 手动重启/重载网关。
-# 例子：
+# 单容器部署（推荐）：
+#   reloadCommand: "kill -HUP $(cat /run/aisix.pid)"
+# 其他：
 #   Docker (Linux):   docker kill -s HUP aisix
 #   systemd:          systemctl reload aisix
 #   Linux 原生:        kill -HUP <pid>

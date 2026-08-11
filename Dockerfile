@@ -1,15 +1,16 @@
 # syntax=docker/dockerfile:1
-# aisix-console — personal web console for the AISIX AI Gateway (file mode).
+# aisix-console — single image: AISIX AI Gateway + web console, one container.
 #
-# The console validates every save with `aisix validate`; the gateway binary
-# is copied from the official gateway image so validation runs the exact
-# binary the gateway runs in production.
+# The gateway binary is built by CI from evlon/aisix and passed in the build
+# context as `aisix-bin/aisix` (see .github/workflows/build-image.yml). Locally,
+# drop any Linux aisix binary there (e.g. extract it from the official image:
+#   podman create ghcr.io/api7/aisix:0.8.1 --name gw-x
+#   podman cp gw-x:/usr/local/bin/aisix aisix-bin/aisix
+#   podman rm gw-x
+# ).
 #
-# Build:   docker/podman build -t aisix-console .
-# Run:     see deploy/podman-run.sh
-
-# Pinned gateway image — bump alongside the gateway you deploy.
-FROM ghcr.io/api7/aisix:0.8.1 AS gateway-image
+# Both processes run under docker/entrypoint.sh, so the console hot-reloads the
+# gateway with `kill -HUP $(cat /run/aisix.pid)` — same PID namespace.
 
 # --- Build the Vue frontend ---------------------------------------------
 FROM node:22-bookworm-slim AS web-build
@@ -23,8 +24,15 @@ RUN npm run build -w web
 
 # --- Runtime -------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
-# `aisix validate` binary, from the gateway image (not rebuilt here).
-COPY --from=gateway-image /usr/local/bin/aisix /usr/local/bin/aisix
+# Gateway binary, built by CI (or provided locally in the build context).
+COPY aisix-bin/aisix /usr/local/bin/aisix
+RUN chmod +x /usr/local/bin/aisix
+# Supervisor entrypoint (gateway + console) and the reload helper.
+COPY docker/entrypoint.sh /usr/local/bin/aisix-console-entrypoint
+RUN chmod +x /usr/local/bin/aisix-console-entrypoint
+COPY docker/gw-hup.sh /usr/local/bin/gw-hup.sh
+RUN chmod +x /usr/local/bin/gw-hup.sh
+
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json ./server/
@@ -33,6 +41,8 @@ RUN npm ci --omit=dev
 COPY server/ ./server/
 COPY --from=web-build /build/web/dist ./web/dist
 
-ENV AISIX_CONSOLE_CONFIG=/etc/aisix-console/aisix-console.yaml
-EXPOSE 8787
-CMD ["node", "server/index.js"]
+# CONSOLE_* prefix (NOT AISIX_*): the aisix gateway in the same container
+# treats every AISIX_* env var as a config override.
+ENV CONSOLE_CONFIG=/etc/aisix/aisix-console.yaml
+EXPOSE 3000 3002 9090 8787
+ENTRYPOINT ["/usr/local/bin/aisix-console-entrypoint"]

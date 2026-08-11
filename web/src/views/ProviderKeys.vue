@@ -70,8 +70,9 @@ async function save() {
       const varName = form.value.envRef || `EXISTING_VAR`;
       entry.api_key = `\${${varName}}`;
     } else if (form.value.api_key) {
-      const name = await allocateProviderVar(form.value.display_name, form.value.api_key);
-      entry.api_key = `\${${name}}`;
+      // Plaintext: written directly into resources.yaml so the gateway picks
+      // it up on the next hot reload — no container recreate, no env wiring.
+      entry.api_key = form.value.api_key;
     } else if (editing.value?.api_key) {
       entry.api_key = editing.value.api_key; // keep existing (masked / env ref)
     } else {
@@ -93,13 +94,6 @@ async function save() {
   } finally {
     saving.value = false;
   }
-}
-
-async function allocateProviderVar(displayName, value) {
-  const slug = displayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32) || 'KEY';
-  const name = `CONSOLE_PK_${slug}`;
-  await api.setSecret(name, value);
-  return name;
 }
 
 async function remove(e) {

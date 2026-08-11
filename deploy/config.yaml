@@ -1,5 +1,5 @@
-# Gateway config for the container deployment (mounted at /etc/aisix/config.yaml
-# in the gateway container; resources.yaml lives next to it).
+# Gateway config for the single-container deployment (mounted at
+# /etc/aisix/config.yaml; resources.yaml lives next to it).
 resources_file: "/etc/aisix/resources.yaml"
 
 proxy:
@@ -7,7 +7,7 @@ proxy:
 
 admin:
   enabled: true
-  addr: "127.0.0.1:3002"
+  addr: "0.0.0.0:3002"
   admin_keys:
     - "admin-local-test"
 

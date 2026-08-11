@@ -1,0 +1,105 @@
+# Builds the AISIX gateway from the evlon/aisix fork, assembles the
+# single-container image (gateway + console), and pushes it to GHCR.
+#
+# Triggers:
+#   push to main        → ghcr.io/evlon/aisix-console:latest
+#   push tag v*         → ghcr.io/evlon/aisix-console:v*
+#   workflow_dispatch   → ghcr.io/evlon/aisix-console:aisix-<shortsha>
+#     (aisix_ref input overrides which evlon/aisix commit to build)
+
+name: build + push image (aisix + console)
+
+on:
+  workflow_dispatch:
+    inputs:
+      aisix_ref:
+        description: "evlon/aisix ref to build (commit / tag / branch)"
+        required: false
+        default: "51e0883ecf27ad641612408ac02706ec84120fec"
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  IMAGE: ghcr.io/evlon/aisix-console
+  # Default aisix ref used when there are no workflow inputs (tag/main pushes).
+  AISIX_REF_DEFAULT: "51e0883ecf27ad641612408ac02706ec84120fec"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-gateway:
+    name: build aisix (linux x86_64, release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: evlon/aisix
+          ref: ${{ inputs.aisix_ref || env.AISIX_REF_DEFAULT }}
+          path: aisix
+
+      - name: install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: aisix
+
+      - name: cargo build --release
+        working-directory: aisix
+        run: cargo build --release -p aisix-server --bin aisix
+
+      - name: upload aisix binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: aisix-bin
+          path: aisix/target/release/aisix
+          if-no-files-found: error
+
+  build-push-image:
+    name: build + push image
+    needs: build-gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: download aisix binary
+        uses: actions/download-artifact@v4
+        with:
+          name: aisix-bin
+          path: aisix-bin
+
+      - name: compute image tag
+        id: meta
+        env:
+          AISIX_REF: ${{ inputs.aisix_ref || env.AISIX_REF_DEFAULT }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tags=${{ env.IMAGE }}:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/main ]]; then
+            echo "tags=${{ env.IMAGE }}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${{ env.IMAGE }}:aisix-${AISIX_REF:0:7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}

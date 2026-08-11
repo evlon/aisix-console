@@ -6,8 +6,8 @@ resources.yaml
 aisix-console.yaml
 auth.json
 deploy/resources.yaml
-deploy/aisix-console.yaml
 deploy/secrets.env
 deploy/auth.json
 deploy/bin/
+aisix-bin/
 .DS_Store
