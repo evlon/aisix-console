@@ -31,6 +31,16 @@ function saveKey() {
   localStorage.setItem(LS_KEY, callerKey.value);
 }
 
+const REQ_TIMEOUT_MS = 120000;
+let controller = null;
+let timeoutId = null;
+let manuallyStopped = false;
+
+function stop() {
+  manuallyStopped = true;
+  controller?.abort();
+}
+
 async function send() {
   const content = prompt.value.trim();
   if (!content || running.value) return;
@@ -39,15 +49,21 @@ async function send() {
   prompt.value = '';
   output.value = '';
   running.value = true;
+  manuallyStopped = false;
 
   const body = { model: model.value, messages: messages.value, callerKey: callerKey.value, stream: stream.value };
   if (temperature.value !== '') body.temperature = Number(temperature.value);
+
+  controller = new AbortController();
+  timeoutId = setTimeout(() => controller.abort(), REQ_TIMEOUT_MS);
+  const signal = controller.signal;
 
   try {
     const res = await fetch('/api/playground/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
@@ -94,8 +110,16 @@ async function send() {
       messages.value.push({ role: 'assistant', content: output.value });
     }
   } catch (e) {
-    error.value = t('playground.requestFailed', { msg: e.message });
+    if (e.name === 'AbortError') {
+      error.value = manuallyStopped
+        ? t('playground.stopped')
+        : t('playground.timedOut', { secs: Math.round(REQ_TIMEOUT_MS / 1000) });
+    } else {
+      error.value = t('playground.requestFailed', { msg: e.message });
+    }
   } finally {
+    clearTimeout(timeoutId);
+    controller = null;
     running.value = false;
   }
 }
@@ -149,6 +173,9 @@ onMounted(loadModels);
         />
         <button class="primary" :disabled="running || !callerKey" @click="send" style="align-self: stretch">
           {{ running ? t('playground.sending') : t('playground.send') }}
+        </button>
+        <button v-if="running" class="danger" @click="stop" style="align-self: stretch">
+          {{ t('playground.stop') }}
         </button>
       </div>
 

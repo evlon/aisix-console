@@ -14,6 +14,7 @@ const DEFAULTS = {
   aisixBin: '',
   secretsFile: path.join(PROJECT_ROOT, 'secrets.env'),
   authFile: path.join(PROJECT_ROOT, 'auth.json'),
+  playgroundTimeoutMs: 180000,
   gateway: {
     proxy: 'http://127.0.0.1:3000',
     admin: 'http://127.0.0.1:3001',
@@ -58,6 +59,9 @@ export function loadConfig() {
     cfg.reloadCommand = process.env.AISIX_CONSOLE_RELOAD_COMMAND;
   }
   if (process.env.AISIX_CONSOLE_AUTH_FILE) cfg.authFile = process.env.AISIX_CONSOLE_AUTH_FILE;
+  if (process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS) {
+    cfg.playgroundTimeoutMs = Number(process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS);
+  }
 
   // Resolve relative paths against the config file's directory (or project root).
   const baseDir = fs.existsSync(configPath) ? path.dirname(configPath) : PROJECT_ROOT;
