@@ -48,6 +48,7 @@ export const api = {
 
   list: (kind) => request(`/api/resources/${kind}`),
   get: (kind, identity) => request(`/api/resources/${kind}/${encodeURIComponent(identity)}`),
+  listProviderModels: (name) => request(`/api/provider-models/${encodeURIComponent(name)}`),
   create: (kind, entry) => request(`/api/resources/${kind}`, { method: 'POST', body: JSON.stringify({ entry }) }),
   update: (kind, identity, entry) =>
     request(`/api/resources/${kind}/${encodeURIComponent(identity)}`, {

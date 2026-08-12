@@ -96,5 +96,35 @@ export function miscRouter(ctx) {
     });
   });
 
+  // List a provider key's upstream models via GET {api_base}/models, so the
+  // UI can offer the real model ids instead of free text. Provider keys are
+  // resolved by display_name; the fetch uses the stored api_key (never
+  // returned to the client).
+  router.get('/provider-models/:name', async (req, res) => {
+    const r = loadFile(ctx.cfg.resourcesFile);
+    if (!r.ok) {
+      return res.status(400).json({ ok: false, error: r.error || 'resources.yaml 解析失败' });
+    }
+    const prov = (r.doc.provider_keys ?? []).find((p) => p.display_name === req.params.name);
+    if (!prov) return res.status(404).json({ ok: false, error: 'provider 不存在' });
+    const base = String(prov.api_base || '').replace(/\/+$/, '');
+    if (!base) return res.json({ ok: false, error: 'provider 未配置 api_base' });
+    const url = `${base}/models`;
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000);
+      const headers = {};
+      if (prov.api_key) headers.Authorization = `Bearer ${prov.api_key}`;
+      const upstream = await fetch(url, { headers, signal: ctrl.signal });
+      clearTimeout(to);
+      if (!upstream.ok) return res.json({ ok: false, error: `上游 HTTP ${upstream.status}` });
+      const data = await upstream.json();
+      const models = Array.isArray(data?.data) ? data.data.map((m) => m?.id).filter(Boolean) : [];
+      return res.json({ ok: true, models });
+    } catch (e) {
+      return res.json({ ok: false, error: e.name === 'AbortError' ? '上游超时' : e.message });
+    }
+  });
+
   return router;
 }

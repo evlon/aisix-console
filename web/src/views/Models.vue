@@ -15,6 +15,9 @@ const editing = ref(null);
 const saving = ref(false);
 const lastResult = ref(null);
 const tab = ref('form'); // 'form' | 'raw'
+const providerModels = ref([]); // real model ids fetched from the selected provider
+const providerModelsState = ref(''); // '' | 'loading' | 'ok' | 'empty' | 'error'
+const providerModelsMsg = ref('');
 
 const emptyForm = () => ({
   display_name: '',
@@ -89,6 +92,46 @@ watch(
     if (form.value.common.timeout === '' && form.value.common.stream_timeout === '') {
       fillRecommendedTimeouts();
     }
+  },
+);
+
+// Fetch the selected provider's real upstream models (GET {api_base}/models)
+// so model_name can be picked from a list instead of typed. Falls back to
+// free text whenever the provider has no /models endpoint or rejects us.
+async function fetchProviderModels() {
+  const name = form.value.direct.provider_key;
+  if (!name) {
+    providerModels.value = [];
+    providerModelsState.value = '';
+    providerModelsMsg.value = '';
+    return;
+  }
+  providerModelsState.value = 'loading';
+  providerModelsMsg.value = '';
+  try {
+    const r = await api.listProviderModels(name);
+    if (r.ok && r.models?.length) {
+      providerModels.value = r.models;
+      providerModelsState.value = 'ok';
+    } else if (r.ok) {
+      providerModels.value = [];
+      providerModelsState.value = 'empty';
+    } else {
+      providerModels.value = [];
+      providerModelsState.value = 'error';
+      providerModelsMsg.value = r.error || '';
+    }
+  } catch (e) {
+    providerModels.value = [];
+    providerModelsState.value = 'error';
+    providerModelsMsg.value = e.message;
+  }
+}
+
+watch(
+  () => form.value.direct.provider_key,
+  () => {
+    if (form.value.shape === 'direct') fetchProviderModels();
   },
 );
 
@@ -406,7 +449,24 @@ onMounted(load);
           </div>
           <div class="form-row">
             <label>{{ t('models.upstreamModel') }}</label>
-            <input v-model="form.direct.model_name" placeholder="gpt-4o-mini" />
+            <div style="flex: 1">
+              <div style="display: flex; gap: 6px">
+                <input v-model="form.direct.model_name" list="provider-model-list" placeholder="gpt-4o-mini" style="flex: 1" />
+                <button :disabled="providerModelsState === 'loading'" @click="fetchProviderModels()">{{ t('models.modelListPull') }}</button>
+              </div>
+              <datalist id="provider-model-list">
+                <option v-for="m in providerModels" :key="m" :value="m" />
+              </datalist>
+              <div v-if="providerModelsState === 'ok'" class="muted" style="font-size: 12px; margin-top: 4px">
+                {{ t('models.modelListHint', { n: providerModels.length }) }}
+              </div>
+              <div v-else-if="providerModelsState === 'empty'" class="muted" style="font-size: 12px; margin-top: 4px">
+                {{ t('models.modelListEmpty') }}
+              </div>
+              <div v-else-if="providerModelsState === 'error'" class="muted" style="font-size: 12px; margin-top: 4px; color: var(--red)">
+                {{ t('models.modelListError', { msg: providerModelsMsg }) }}
+              </div>
+            </div>
           </div>
           <div class="form-row">
             <label>{{ t('models.providerKey') }}</label>
