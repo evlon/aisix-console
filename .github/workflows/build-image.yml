@@ -1,30 +1,59 @@
-# Builds the AISIX gateway from the evlon/aisix fork, assembles the
-# single-container image (gateway + console), and pushes it to GHCR.
+# Builds the AISIX gateway and assembles the single-container image
+# (gateway + console), pushed to GHCR.
+#
+# Gateway source (two-track):
+#   stable  → api7/aisix at a pinned commit (2cbf39c, the console's
+#             known-good gateway; it includes claim_mappings, which the
+#             console writes and the latest api7/aisix release v0.8.2
+#             does NOT yet — so a release tag can't be used for stable yet).
+#             This commit IS an api7/aisix commit (evlon/aisix is a no-patch
+#             tracking fork), so the fork is retired entirely. When api7/aisix
+#             ships a release NEWER than v0.8.2 that includes claim_mappings,
+#             just set AISIX_STABLE_REF to that tag — the validate gate below
+#             will confirm it passes before any image is pushed.
+#             → :latest / :v*
+#   edge    → api7/aisix main (newest features)        → :edge (nightly + dispatch)
+#   aisix_ref input overrides the track default.
 #
 # Triggers:
-#   push to main        → ghcr.io/evlon/aisix-console:latest
+#   push to main        → ghcr.io/evlon/aisix-console:latest   (stable)
 #   push tag v*         → ghcr.io/evlon/aisix-console:v*
-#   workflow_dispatch   → ghcr.io/evlon/aisix-console:aisix-<shortsha>
-#     (aisix_ref input overrides which evlon/aisix commit to build)
+#   schedule (nightly)  → ghcr.io/evlon/aisix-console:edge
+#   workflow_dispatch   → stable (:latest) or edge (:edge)
 
 name: build + push image (aisix + console)
 
 on:
   workflow_dispatch:
     inputs:
-      aisix_ref:
-        description: "evlon/aisix ref to build (commit / tag / branch)"
+      track:
+        description: "stable = api7/aisix pinned commit (known-good); edge = api7/aisix main (newest features)"
         required: false
-        default: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
+        default: "stable"
+      aisix_ref:
+        description: "override gateway ref (commit / tag / branch) — overrides the track default"
+        required: false
+        default: ""
   push:
     branches: [main]
     tags: ["v*"]
+  # Nightly: rebuild the edge track from api7/aisix main.
+  schedule:
+    - cron: "17 3 * * *"
 
 env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/evlon/aisix-console
-  # Default aisix ref used when there are no workflow inputs (tag/main pushes).
-  AISIX_REF_DEFAULT: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
+  # Default gateway refs per track.
+  #   stable → api7/aisix at a pinned commit (the console's known-good
+  #            gateway; includes claim_mappings, which v0.8.2 lacks).
+  #   edge   → api7/aisix main (newest features).
+  # When api7/aisix ships a release NEWER than v0.8.2 that includes
+  # claim_mappings, set AISIX_STABLE_REF to that tag (the validate gate
+  # will confirm it passes before push).
+  AISIX_STABLE_REPO: "api7/aisix"
+  AISIX_STABLE_REF: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
+  AISIX_EDGE_REPO: "api7/aisix"
 
 permissions:
   contents: read
@@ -40,6 +69,9 @@ jobs:
     # runtime lacks, so the gateway fails to exec ("GLIBC_2.38 not found").
     container:
       image: debian:bookworm
+    outputs:
+      aisix_version: ${{ steps.ver.outputs.version }}
+      track: ${{ steps.src.outputs.track }}
     steps:
       - name: install build deps
         run: |
@@ -48,10 +80,31 @@ jobs:
             git curl ca-certificates build-essential pkg-config \
             protobuf-compiler libssl-dev
 
+      - name: resolve gateway source
+        id: src
+        run: |
+          set -eu
+          track="${{ inputs.track }}"
+          if [ -z "$track" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              track="edge"
+            else
+              track="stable"
+            fi
+          fi
+          echo "track=$track" >> "$GITHUB_OUTPUT"
+          if [ "$track" = "edge" ]; then
+            echo "repo=${{ env.AISIX_EDGE_REPO }}" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.aisix_ref || 'main' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "repo=${{ env.AISIX_STABLE_REPO }}" >> "$GITHUB_OUTPUT"
+            echo "ref=${{ inputs.aisix_ref || env.AISIX_STABLE_REF }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
         with:
-          repository: evlon/aisix
-          ref: ${{ inputs.aisix_ref || env.AISIX_REF_DEFAULT }}
+          repository: ${{ steps.src.outputs.repo }}
+          ref: ${{ steps.src.outputs.ref }}
           path: aisix
 
       - uses: dtolnay/rust-toolchain@stable
@@ -64,6 +117,18 @@ jobs:
         working-directory: aisix
         run: cargo build --release -p aisix-server --bin aisix
 
+      - name: set gateway version
+        id: ver
+        run: |
+          set -eu
+          tag="${{ steps.src.outputs.ref }}"
+          sha=$(git -C aisix rev-parse --short HEAD)
+          if [ "${{ steps.src.outputs.track }}" = "edge" ]; then
+            echo "version=edge-${sha}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: upload aisix binary
         uses: actions/upload-artifact@v4
         with:
@@ -75,6 +140,8 @@ jobs:
     name: build + push image
     needs: build-gateway
     runs-on: ubuntu-latest
+    env:
+      AISIX_VERSION: ${{ needs.build-gateway.outputs.aisix_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -84,18 +151,26 @@ jobs:
           name: aisix-bin
           path: aisix-bin
 
+      - name: validate gateway resources schema
+        # Mirrors the console's own `aisix validate --resources <file>` call
+        # (server/src/validate.js). Fails the build on gateway-schema drift
+        # vs. what the console writes, before any image is pushed.
+        run: |
+          chmod +x aisix-bin/aisix
+          ./aisix-bin/aisix validate --resources deploy/resources.ci-sample.yaml
+
       - name: compute image tag
         id: meta
-        env:
-          AISIX_REF: ${{ inputs.aisix_ref || env.AISIX_REF_DEFAULT }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
             echo "tags=${{ env.IMAGE }}:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/main ]]; then
             echo "tags=${{ env.IMAGE }}:latest" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ needs.build-gateway.outputs.track }}" == "edge" ]]; then
+            echo "tags=${{ env.IMAGE }}:edge" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=${{ env.IMAGE }}:aisix-${AISIX_REF:0:7}" >> "$GITHUB_OUTPUT"
+            echo "tags=${{ env.IMAGE }}:aisix-${AISIX_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: login to GHCR
@@ -110,4 +185,6 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            AISIX_VERSION=${{ env.AISIX_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}

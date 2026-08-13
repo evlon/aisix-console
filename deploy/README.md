@@ -8,9 +8,22 @@ for new provider keys (they are written as plaintext into `resources.yaml`).
 
 ## Build
 
-The gateway binary is built by CI from `evlon/aisix` (see
-`.github/workflows/build-image.yml`). For a local build, drop any Linux `aisix`
-binary into `aisix-bin/aisix` first (e.g. extract it from the official image):
+The gateway binary is built by CI with a **two-track** strategy (see
+`.github/workflows/build-image.yml`):
+
+- **stable** — built from `api7/aisix` at a pinned commit (the console's
+  known-good gateway; it includes `claim_mappings`, which the latest
+  `api7/aisix` release `v0.8.2` does **not** yet — so a release tag can't be
+  used for stable until `api7/aisix` ships a release that includes it). The
+  `evlon/aisix` fork is retired; this commit is an `api7/aisix` commit.
+  Published as `:latest` (and `:v*` on tag pushes).
+- **edge** — built from `api7/aisix` `main` (newest features), published as
+  `:edge`. Refreshed nightly and on `workflow_dispatch` (`track=edge`).
+
+Every image carries an `aisix.version` OCI label recording the gateway build
+(`docker inspect --format '{{.Config.Labels}}' <image>`). For a local build,
+drop any Linux `aisix` binary into `aisix-bin/aisix` first (e.g. extract it
+from the official image):
 
 ```bash
 mkdir -p aisix-bin
@@ -89,12 +102,14 @@ docker compose -f deploy/docker-compose.yml up -d
 
 ## Building the image in CI
 
-`.github/workflows/build-image.yml` builds `aisix` from the `evlon/aisix` fork
-(`aisix_ref` input, pinned default), assembles the image, and pushes to
-`ghcr.io/evlon/aisix-console`:
-- push to `main` → `latest`
+`.github/workflows/build-image.yml` builds `aisix` (two-track; see above) and
+pushes to `ghcr.io/evlon/aisix-console`. The `aisix_ref` input overrides the
+track's default ref; the `track` input selects stable (`api7/aisix` pinned
+commit → `:latest` / `:v*`) or edge (`api7/aisix` main → `:edge`):
+- push to `main` → `latest` (stable)
 - tag `v*` → `v*`
-- manual run → `aisix-<shortsha>`
+- nightly / `track=edge` → `edge`
+- manual run with `aisix_ref` → `aisix-<version>`
 
 Logs: the supervisor writes the gateway to `/var/log/aisix-gateway.log` inside
 the container; `docker logs aisix` shows the console plus `[entrypoint]`

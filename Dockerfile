@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 # aisix-console — single image: AISIX AI Gateway + web console, one container.
 #
-# The gateway binary is built by CI from evlon/aisix and passed in the build
-# context as `aisix-bin/aisix` (see .github/workflows/build-image.yml). Locally,
+# The gateway binary is built by CI from api7/aisix (a pinned commit for the
+# stable track, main for the edge track) and passed in the build context as
+# `aisix-bin/aisix` (see .github/workflows/build-image.yml). Locally,
 # drop any Linux aisix binary there (e.g. extract it from the official image:
 #   podman create ghcr.io/api7/aisix:0.8.1 --name gw-x
 #   podman cp gw-x:/usr/local/bin/aisix aisix-bin/aisix
@@ -24,6 +25,11 @@ RUN npm run build -w web
 
 # --- Runtime -------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
+ARG AISIX_VERSION
+LABEL org.opencontainers.image.base="node:22-bookworm-slim"
+LABEL org.opencontainers.image.source="https://github.com/evlon/aisix-console"
+LABEL org.opencontainers.image.description="AISIX AI Gateway + web console (single container)"
+LABEL aisix.version="${AISIX_VERSION}"
 # Gateway binary, built by CI (or provided locally in the build context).
 COPY --chmod=755 aisix-bin/aisix /usr/local/bin/aisix
 # Supervisor entrypoint (gateway + console) and the reload helper.

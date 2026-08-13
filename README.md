@@ -19,7 +19,7 @@ Node.js（Express）后端 + Vue 3 / Vite 前端（vue-i18n 双语），npm work
 
 ## 部署（单容器，推荐）
 
-**网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 从 `evlon/aisix` fork 编译网关，见 `.github/workflows/build-image.yml`），一个容器同时跑两个进程。保存配置后**自动热重载网关**，新增密钥也即改即生效，无需任何手动步骤。详见 **[deploy/README.md](deploy/README.md)**。
+**网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 编译网关，双轨：稳定轨从 `api7/aisix` 固定 commit 编译、edge 轨从 `api7/aisix` main 编译；镜像带 `aisix.version` 标签，见 `.github/workflows/build-image.yml`），一个容器同时跑两个进程。保存配置后**自动热重载网关**，新增密钥也即改即生效，无需任何手动步骤。详见 **[deploy/README.md](deploy/README.md)**。
 
 ```bash
 # 全新服务器一键安装：

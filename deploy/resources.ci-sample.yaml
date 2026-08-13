@@ -1,0 +1,97 @@
+# CI validation sample for the gateway's `aisix validate --resources` gate.
+#
+# Exercises every collection the console can write, with literal (non-`${VAR}`)
+# values so it validates without any secret env. References are kept internally
+# consistent (provider_key <-> model, api_key <-> claim_mapping/cache/rate_limit,
+# oidc_provider <-> claim_mapping) so the file loads cleanly. If the gateway
+# changes a collection's schema, this file fails the build — that is the point.
+# NOTE: do NOT seed this into a live data dir; `run.sh` uses
+# `resources.template.yaml` (all-empty scaffold) for that.
+
+_format_version: "1"
+
+provider_keys:
+  - display_name: openai-prod
+    provider: openai
+    api_base: https://api.openai.com/v1
+    api_key: sk-example-openai
+  - display_name: deepseek
+    provider: openai
+    api_base: https://api.deepseek.com
+    adapter: openai
+    api_key: sk-example-deepseek
+
+models:
+  - display_name: gpt-4o
+    provider: openai
+    model_name: gpt-4o-2024-11-20
+    provider_key: openai-prod
+    timeout: 25000
+  # Routing-only (composed) model — references the other models by name.
+  # A routing model carries only `routing`; timeout/cooldown live on direct
+  # models (see `gpt-4o` above).
+  - display_name: deepseek-chat
+    routing:
+      strategy: failover
+      targets:
+        - model: gpt-4o
+      when_all_unavailable: fail
+
+api_keys:
+  - display_name: local-dev
+    allowed_models:
+      - "*"
+    key_hash: 91ed2dbc407561556f3e7be98ba0bd2a57986d6a868c482d867d19c6d40d201c
+
+guardrails:
+  - name: global-keyword
+    kind: keyword
+    patterns:
+      - kind: literal
+        value: blocked-phrase
+
+mcp_servers:
+  - name: demo-mcp
+    type: mcp
+    url: https://example.com/mcp
+
+a2a_agents:
+  - name: demo-agent
+    url: https://agents.example.com/a2a
+
+cache_policies:
+  # Reference an existing model by its file name (alias).
+  - name: cache-gpt4o
+    applies_to: model:gpt-4o
+
+observability_exporters:
+  - name: demo-otlp
+    enabled: true
+    kind: otlp_http
+    endpoint: https://api.honeycomb.io/v1/traces
+    headers:
+      x-honeycomb-team: example-token
+
+rate_limit_policies:
+  - name: rl-gpt4o
+    scope: model
+    scope_ref: gpt-4o
+    window: minute
+    max_requests: 10
+
+oidc_providers:
+  - name: corp
+    issuer: https://sso.example.com/realms/agents
+    audiences:
+      - aisix
+
+claim_mappings:
+  - name: finance-dept
+    jwt_provider: corp
+    match:
+      - claim: department
+        op: exact
+        values:
+          - finance
+    resolve:
+      api_key: local-dev
