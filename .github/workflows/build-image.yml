@@ -2,15 +2,12 @@
 # (gateway + console), pushed to GHCR.
 #
 # Gateway source (two-track):
-#   stable  → api7/aisix at a pinned commit (2cbf39c, the console's
-#             known-good gateway; it includes claim_mappings, which the
-#             console writes and the latest api7/aisix release v0.8.2
-#             does NOT yet — so a release tag can't be used for stable yet).
-#             This commit IS an api7/aisix commit (evlon/aisix is a no-patch
-#             tracking fork), so the fork is retired entirely. When api7/aisix
-#             ships a release NEWER than v0.8.2 that includes claim_mappings,
-#             just set AISIX_STABLE_REF to that tag — the validate gate below
-#             will confirm it passes before any image is pushed.
+#   stable  → api7/aisix LATEST RELEASE, fetched at build time via the
+#             GitHub API (includes claim_mappings, which the console
+#             writes). The validate gate below rejects gateway-schema
+#             drift before any image is pushed, so stable always tracks
+#             the newest compatible release. Override with aisix_ref.
+#             (evlon/aisix fork is retired — both tracks use api7/aisix.)
 #             → :latest / :v*
 #   edge    → api7/aisix main (newest features)        → :edge (nightly + dispatch)
 #   aisix_ref input overrides the track default.
@@ -27,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: "stable = api7/aisix pinned commit (known-good); edge = api7/aisix main (newest features)"
+        description: "stable = api7/aisix latest release; edge = api7/aisix main (newest features)"
         required: false
         default: "stable"
       aisix_ref:
@@ -45,14 +42,14 @@ env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/evlon/aisix-console
   # Default gateway refs per track.
-  #   stable → api7/aisix at a pinned commit (the console's known-good
-  #            gateway; includes claim_mappings, which v0.8.2 lacks).
+  #   stable → api7/aisix latest release (fetched at build time). The
+  #            validate gate rejects schema drift before push, so it is
+  #            safe to always track the newest release. AISIX_STABLE_FALLBACK
+  #            is only used if the GitHub API call to find the latest release
+  #            fails (transient network / rate-limit). Override with aisix_ref.
   #   edge   → api7/aisix main (newest features).
-  # When api7/aisix ships a release NEWER than v0.8.2 that includes
-  # claim_mappings, set AISIX_STABLE_REF to that tag (the validate gate
-  # will confirm it passes before push).
   AISIX_STABLE_REPO: "api7/aisix"
-  AISIX_STABLE_REF: "2cbf39c1737b9ba69b06ba8ea12beb7a516fe369"
+  AISIX_STABLE_FALLBACK: "v0.9.0"
   AISIX_EDGE_REPO: "api7/aisix"
 
 permissions:
@@ -78,7 +75,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             git curl ca-certificates build-essential pkg-config \
-            protobuf-compiler libssl-dev
+            protobuf-compiler libssl-dev jq
 
       - name: resolve gateway source
         id: src
@@ -98,7 +95,26 @@ jobs:
             echo "ref=${{ inputs.aisix_ref || 'main' }}" >> "$GITHUB_OUTPUT"
           else
             echo "repo=${{ env.AISIX_STABLE_REPO }}" >> "$GITHUB_OUTPUT"
-            echo "ref=${{ inputs.aisix_ref || env.AISIX_STABLE_REF }}" >> "$GITHUB_OUTPUT"
+            if [ -n "${{ inputs.aisix_ref }}" ]; then
+              ref="${{ inputs.aisix_ref }}"
+            else
+              # Fetch the latest release tag via the GitHub API. On transient
+              # failure / rate-limit, fall back to AISIX_STABLE_FALLBACK.
+              ref="${{ env.AISIX_STABLE_FALLBACK }}"
+              tag="$(
+                curl -fsSL \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${{ github.token }}" \
+                  "https://api.github.com/repos/${{ env.AISIX_STABLE_REPO }}/releases/latest" \
+                | jq -r '.tag_name // empty' 2>/dev/null || true
+              )"
+              if [ -n "$tag" ]; then
+                ref="$tag"
+              else
+                echo "::warning::could not fetch latest stable release, using fallback $ref"
+              fi
+            fi
+            echo "ref=$ref" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v4
