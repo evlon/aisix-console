@@ -36,3 +36,12 @@ gateway:
 #   Linux 原生:        kill -HUP <pid>
 #   Windows 原生:      无 SIGHUP，留空，改配置后需重启网关
 reloadCommand: ""
+
+# ---- 用量统计看板（Prometheus 抓取 + SQLite 落盘）----
+# 控制台后端会定时抓取网关 metrics 监听的 /metrics，把计数器快照写入 SQLite，
+# 从而能算「区间用量」（请求量 / token / 费用 / 延迟趋势）。需要网关侧
+# observability.metrics.prometheus.enabled: true（默认即开启）。
+metricsDb: "./data/metrics.db"          # SQLite 文件路径（相对路径按本配置文件目录解析）
+metricsScrapeIntervalSeconds: 10        # 抓取间隔（秒）
+metricsRetentionDays: 7                 # 历史快照保留天数（过期自动清理）
+

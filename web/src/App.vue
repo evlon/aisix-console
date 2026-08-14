@@ -24,6 +24,7 @@ const nav = [
   { path: '/secrets', key: 'app.nav.secrets' },
   { path: '/raw', key: 'app.nav.raw' },
   { path: '/settings', key: 'app.nav.settings' },
+  { path: '/metrics', key: 'app.nav.metrics' },
 ];
 
 const stateClass = (s) =>

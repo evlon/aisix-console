@@ -8,9 +8,11 @@ import * as secrets from './src/secrets.js';
 import { initAuth } from './src/auth.js';
 import { createSaver } from './src/savePipeline.js';
 import { makeGatewayClient } from './src/gateway.js';
+import { createMetricsCollector } from './src/metrics.js';
 import { resourcesRouter } from './src/routes/resources.js';
 import { statusRouter, secretsRouter, miscRouter } from './src/routes/status.js';
 import { playgroundRouter } from './src/routes/playground.js';
+import { metricsRouter } from './src/routes/metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,12 +41,15 @@ function buildApp(cfg) {
     reloadCommand: cfg.reloadCommand,
   });
   const gw = makeGatewayClient(cfg);
-  const ctx = { cfg, saver, gw };
+  const metrics = createMetricsCollector(cfg);
+  metrics.start();
+  const ctx = { cfg, saver, gw, metrics };
 
   app.use('/api/status', statusRouter(ctx));
   app.use('/api/resources', resourcesRouter(ctx));
   app.use('/api/secrets', secretsRouter(ctx));
   app.use('/api/playground', playgroundRouter(ctx));
+  app.use('/api/metrics', metricsRouter(ctx));
   app.use('/api', miscRouter(ctx));
 
   // Serve the built SPA (web/dist) in production; dev uses the Vite proxy.

@@ -68,4 +68,10 @@ export const api = {
   playground: (body) => request('/api/playground/chat', { method: 'POST', body: JSON.stringify(body) }),
 
   health: () => request('/api/health'),
+
+  // metrics / usage dashboard
+  metricsOverview: () => request('/api/metrics/overview'),
+  metricsSummary: (range = '1h') => request(`/api/metrics/summary?range=${encodeURIComponent(range)}`),
+  metricsTrend: (range = '1h', series = 'requests') =>
+    request(`/api/metrics/trend?range=${encodeURIComponent(range)}&series=${encodeURIComponent(series)}`),
 };

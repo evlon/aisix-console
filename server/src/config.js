@@ -22,6 +22,9 @@ const DEFAULTS = {
     adminKey: '',
   },
   reloadCommand: '',
+  metricsDb: path.join(PROJECT_ROOT, 'data', 'metrics.db'),
+  metricsScrapeIntervalSeconds: 10,
+  metricsRetentionDays: 7,
 };
 
 function deepMerge(base, override) {
@@ -69,6 +72,12 @@ export function loadConfig() {
   if (envAuth) cfg.authFile = envAuth;
   const envPg = process.env.CONSOLE_PLAYGROUND_TIMEOUT_MS || process.env.AISIX_CONSOLE_PLAYGROUND_TIMEOUT_MS;
   if (envPg) cfg.playgroundTimeoutMs = Number(envPg);
+  const envMetricsDb = process.env.CONSOLE_METRICS_DB || process.env.AISIX_CONSOLE_METRICS_DB;
+  if (envMetricsDb) cfg.metricsDb = envMetricsDb;
+  const envScrape = process.env.CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS || process.env.AISIX_CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS;
+  if (envScrape) cfg.metricsScrapeIntervalSeconds = Number(envScrape);
+  const envRetention = process.env.CONSOLE_METRICS_RETENTION_DAYS || process.env.AISIX_CONSOLE_METRICS_RETENTION_DAYS;
+  if (envRetention) cfg.metricsRetentionDays = Number(envRetention);
 
   // Resolve relative paths against the config file's directory (or project root).
   const baseDir = fs.existsSync(configPath) ? path.dirname(configPath) : PROJECT_ROOT;
@@ -77,6 +86,7 @@ export function loadConfig() {
   cfg.aisixBin = cfg.aisixBin ? resolve(cfg.aisixBin) : '';
   cfg.secretsFile = resolve(cfg.secretsFile);
   cfg.authFile = resolve(cfg.authFile);
+  cfg.metricsDb = resolve(cfg.metricsDb);
   cfg.configPath = configPath;
 
   return Object.freeze(cfg);
