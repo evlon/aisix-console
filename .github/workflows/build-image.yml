@@ -8,15 +8,15 @@
 #             drift before any image is pushed, so stable always tracks
 #             the newest compatible release. Override with aisix_ref.
 #             (evlon/aisix fork is retired — both tracks use api7/aisix.)
-#             → :latest / :v*
-#   edge    → api7/aisix main (newest features)        → :edge (nightly + dispatch)
+#             → :latest + :aisix-X.Y.Z
+#   edge    → api7/aisix main (newest features)        → :edge (dispatch only)
 #   aisix_ref input overrides the track default.
 #
 # Triggers:
-#   push to main        → ghcr.io/evlon/aisix-console:latest   (stable)
-#   push tag v*         → ghcr.io/evlon/aisix-console:v*
-#   schedule (nightly)  → ghcr.io/evlon/aisix-console:edge
-#   workflow_dispatch   → stable (:latest) or edge (:edge)
+#   push to main        → ghcr.io/evlon/aisix-console:latest + :aisix-X.Y.Z  (stable)
+#   push tag v*         → ghcr.io/evlon/aisix-console:v*   (console release)
+#   schedule (nightly)  → ghcr.io/evlon/aisix-console:latest + :aisix-X.Y.Z  (stable — tracks releases)
+#   workflow_dispatch   → stable (:latest + :aisix-X.Y.Z) or edge (:edge)
 
 name: build + push image (aisix + console)
 
@@ -34,7 +34,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  # Nightly: rebuild the edge track from api7/aisix main.
+  # Nightly: rebuild the stable track (latest aisix release) so :latest
+  # tracks releases — a new aisix release shows up in :latest within ~24h.
   schedule:
     - cron: "17 3 * * *"
 
@@ -84,17 +85,20 @@ jobs:
           track="${{ inputs.track }}"
           if [ -z "$track" ]; then
             if [ "${{ github.event_name }}" = "schedule" ]; then
-              track="edge"
+              track="stable"
             else
               track="stable"
             fi
           fi
           echo "track=$track" >> "$GITHUB_OUTPUT"
           if [ "$track" = "edge" ]; then
-            echo "repo=${{ env.AISIX_EDGE_REPO }}" >> "$GITHUB_OUTPUT"
-            echo "ref=${{ inputs.aisix_ref || 'main' }}" >> "$GITHUB_OUTPUT"
+            repo="${{ env.AISIX_EDGE_REPO }}"
+            ref="${{ inputs.aisix_ref || 'main' }}"
+            echo "repo=$repo" >> "$GITHUB_OUTPUT"
+            echo "ref=$ref" >> "$GITHUB_OUTPUT"
           else
-            echo "repo=${{ env.AISIX_STABLE_REPO }}" >> "$GITHUB_OUTPUT"
+            repo="${{ env.AISIX_STABLE_REPO }}"
+            echo "repo=$repo" >> "$GITHUB_OUTPUT"
             if [ -n "${{ inputs.aisix_ref }}" ]; then
               ref="${{ inputs.aisix_ref }}"
             else
@@ -115,6 +119,7 @@ jobs:
               fi
             fi
             echo "ref=$ref" >> "$GITHUB_OUTPUT"
+            echo "::notice::Resolved gateway source → repo=$repo ref=$ref (track=$track)"
           fi
 
       - uses: actions/checkout@v4
@@ -133,17 +138,26 @@ jobs:
         working-directory: aisix
         run: cargo build --release -p aisix-server --bin aisix
 
+      - name: print compiled gateway version
+        # Actually execute the freshly built binary so the compiled version is
+        # visible in the log (the "see what was built" step).
+        working-directory: aisix
+        run: ./target/release/aisix --version 2>&1 || ./target/release/aisix version 2>&1 || true
+
       - name: set gateway version
         id: ver
         run: |
           set -eu
           tag="${{ steps.src.outputs.ref }}"
+          trk="${{ steps.src.outputs.track }}"
           sha=$(git -C aisix rev-parse --short HEAD)
-          if [ "${{ steps.src.outputs.track }}" = "edge" ]; then
-            echo "version=edge-${sha}" >> "$GITHUB_OUTPUT"
+          if [ "$trk" = "edge" ]; then
+            version="edge-${sha}"
           else
-            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+            version="${tag#v}"
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "::notice::Compiled AISIX gateway version = $version (track=$trk, ref=$tag, sha=$sha)"
 
       - name: upload aisix binary
         uses: actions/upload-artifact@v4
@@ -179,14 +193,17 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
+          track="${{ needs.build-gateway.outputs.track }}"
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]]; then
+            # Console release: tag the image with the console version.
             echo "tags=${{ env.IMAGE }}:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/heads/main ]]; then
-            echo "tags=${{ env.IMAGE }}:latest" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ needs.build-gateway.outputs.track }}" == "edge" ]]; then
+          elif [[ "$track" == "edge" ]]; then
             echo "tags=${{ env.IMAGE }}:edge" >> "$GITHUB_OUTPUT"
           else
-            echo "tags=${{ env.IMAGE }}:aisix-${AISIX_VERSION}" >> "$GITHUB_OUTPUT"
+            # Stable track (latest aisix release): always refresh :latest and
+            # also pin the exact gateway version so a release is reproducible
+            # (e.g. ghcr.io/evlon/aisix-console:aisix-0.10.0).
+            echo "tags=${{ env.IMAGE }}:latest,${{ env.IMAGE }}:aisix-${AISIX_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: login to GHCR
@@ -204,3 +221,14 @@ jobs:
           build-args: |
             AISIX_VERSION=${{ env.AISIX_VERSION }}
           tags: ${{ steps.meta.outputs.tags }}
+
+      - name: summarize build
+        if: always()
+        run: |
+          {
+            echo "### AISIX gateway image build"
+            echo "- track: ${{ needs.build-gateway.outputs.track }}"
+            echo "- aisix.version: ${{ env.AISIX_VERSION }}"
+            echo "- image tags: ${{ steps.meta.outputs.tags }}"
+            echo "- resolved gateway ref: ${{ needs.build-gateway.outputs.track == 'edge' && 'api7/aisix@main' || 'api7/aisix latest release' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
