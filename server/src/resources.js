@@ -76,6 +76,61 @@ export function loadFile(filePath) {
   }
 }
 
+// ---- async, cached loader -----------------------------------------------
+// The console sits in the same container as the AISIX gateway and the
+// resources.yaml lives on a bind-mounted volume (/etc/aisix). Bind mounts on
+// some setups (notably Docker Desktop on Windows) can stall on synchronous
+// reads after long uptime; because `fs.readFileSync` blocks the ENTIRE Node
+// event loop, a single stalled read freezes the whole console (every page and
+// API), while the gateway — which serves from in-memory state — keeps working.
+//
+// These helpers make the hot path (status polling every 5s) asynchronous and
+// cache the parsed file keyed by mtime+size, so a slow volume only delays the
+// one request touching it, never the whole process.
+import { stat } from 'node:fs/promises';
+
+const cache = new Map(); // filePath -> { mtimeMs, size, promise }
+
+async function readTextAsync(filePath) {
+  return fs.promises.readFile(filePath, 'utf8');
+}
+
+// Async read; throws on ENOENT/permission so callers can catch.
+export async function readFileAsync(filePath) {
+  const text = await readTextAsync(filePath);
+  try {
+    const doc = parseYaml(text, { uniqueKeys: true });
+    return { ok: true, exists: true, doc, text };
+  } catch (e) {
+    return { ok: false, exists: true, text, error: `YAML 解析失败: ${e.message}` };
+  }
+}
+
+// Async read with mtime+size caching. Cheap (non-blocking) `stat` gates the
+// expensive parse; if the file is unchanged we return the prior result
+// without re-reading. On a stalled volume the slow operation is the awaited
+// `stat`/`readFile` — it does NOT block other requests.
+export async function loadFileCached(filePath) {
+  let st;
+  try {
+    st = await stat(filePath);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      cache.delete(filePath);
+      return { ok: false, exists: false, text: '', error: 'file_not_found' };
+    }
+    return { ok: false, exists: true, text: '', error: `stat failed: ${e.message}` };
+  }
+  const key = `${st.mtimeMs}:${st.size}`;
+  const hit = cache.get(filePath);
+  if (hit && hit.key === key) return hit.value;
+
+  const result = await readFileAsync(filePath); // may throw on read error
+  const entry = { key, value: result };
+  cache.set(filePath, entry);
+  return result;
+}
+
 export function identityOf(kind, entry) {
   return entry?.[IDENTITY_FIELD[kind]] ?? entry?.name ?? entry?.display_name ?? '';
 }

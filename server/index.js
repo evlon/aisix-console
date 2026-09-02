@@ -28,9 +28,23 @@ function buildApp(cfg) {
   app.get('/api/auth/status', auth.statusHandler);
   app.post('/api/auth/change-password', auth.requireAuth, auth.changePasswordHandler);
 
+  // Health check is public and must stay unauthenticated so external
+  // orchestrators (Docker HEALTHCHECK / restart policies) can probe the console
+  // even before login. Served before the auth guard on purpose.
+  app.get('/api/health', (_req, res) =>
+    res.json({
+      ok: true,
+      resourcesFile: cfg.resourcesFile,
+      aisixBin: cfg.aisixBin || null,
+      reloadCommand: cfg.reloadCommand || null,
+      gateway: cfg.gateway,
+    }),
+  );
+
   // Guard the rest of the API.
   app.use('/api', (req, res, next) => {
     if (req.path.startsWith('/auth/')) return next();
+    if (req.path === '/health') return next();
     auth.requireAuth(req, res, next);
   });
 

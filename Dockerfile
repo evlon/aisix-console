@@ -48,4 +48,15 @@ COPY --from=web-build /build/web/dist ./web/dist
 # treats every AISIX_* env var as a config override.
 ENV CONSOLE_CONFIG=/etc/aisix/aisix-console.yaml
 EXPOSE 3000 3002 9090 8787
+
+# Liveness probe for the console. The console is the part that can wedge (it
+# does synchronous I/O on a bind-mounted volume and, before the restart-loop
+# fix, would not recover from a crash). A wedged-but-alive console can't exit
+# on its own, so this HEALTHCHECK + a restart policy (see deploy/run.sh
+# --restart unless-stopped and compose restart:) is the backstop: if /api/health
+# stops responding, docker/podman restarts the container. /api/health is
+# intentionally public (unauthenticated) for exactly this reason.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 ENTRYPOINT ["/usr/local/bin/aisix-console-entrypoint"]

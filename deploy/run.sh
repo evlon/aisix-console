@@ -121,6 +121,7 @@ fetch_image
 
 "$RUNNER" rm -f aisix >/dev/null 2>&1 || true
 "$RUNNER" run -d --name aisix \
+  --restart unless-stopped \
   -p "$P_PROXY:3000" -p "$P_ADMIN:3002" -p "$P_METRICS:9090" -p "$P_CONSOLE:8787" \
   -v "$DATA_DIR":/etc/aisix \
   "$IMAGE"

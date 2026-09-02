@@ -23,6 +23,9 @@ authFile: "/etc/aisix/auth.json"
 # 试玩请求超时（毫秒），防止上游挂起时界面一直「发送中」
 playgroundTimeoutMs: 180000
 
+# 用量统计落盘路径（建议放挂载卷 /etc/aisix，重建容器不丢；默认会落到可写层）
+metricsDb: "/etc/aisix/data/metrics.db"
+
 gateway:
   proxy: "http://127.0.0.1:3000"     # 代理监听（试玩页转发目标）
   admin: "http://127.0.0.1:3002"      # Admin 监听（读状态用）

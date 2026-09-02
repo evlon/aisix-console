@@ -2,7 +2,7 @@
 // gateway. Also secrets names (never values) and misc endpoints.
 import { Router } from 'express';
 import * as secrets from '../secrets.js';
-import { loadFile, fingerprint, KINDS } from '../resources.js';
+import { loadFile, loadFileCached, fingerprint, KINDS } from '../resources.js';
 
 export function statusRouter(ctx) {
   const router = Router();
@@ -14,8 +14,9 @@ export function statusRouter(ctx) {
       gw.statusModels(),
       gw.adminHealth(),
     ]);
-    // Resource counts from the file (cheap, no gateway needed).
-    const r = loadFile(ctx.cfg.resourcesFile);
+    // Resource counts from the file (cheap, no gateway needed). Async + cached
+    // so a slow bind mount only delays this request, not the whole console.
+    const r = await loadFileCached(ctx.cfg.resourcesFile);
     const counts = {};
     if (r.ok) for (const kind of KINDS) counts[kind] = (r.doc[kind] ?? []).length;
     res.json({
