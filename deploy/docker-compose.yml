@@ -1,14 +1,34 @@
 # Single-container deployment: AISIX gateway + web console in one image.
-# Ports are overridable via env (same vars as run.sh / install.sh).
+# Start / stop / update with docker-compose (run from this deploy/ dir):
+#   docker-compose up -d                       # first start / apply changes
+#   docker-compose pull && docker-compose up -d   # update to a new image
+#   docker-compose down                        # stop (host data dir kept)
+#   docker-compose logs -f                     # follow logs
+#
+# Ports / image are overridable via env (same vars as run.sh):
+#   AISIX_IMAGE         ghcr.nju.edu.cn/evlon/aisix-console:latest
+#   AISIX_CONSOLE_PORT  8400   (host -> container :8787 console UI)
+#   AISIX_PROXY_PORT    8480   (host -> container :3000 proxy)
+#   AISIX_ADMIN_PORT    3002   (host -> container :3002 admin)
+#   AISIX_METRICS_PORT  9090   (host -> container :9090 metrics)
+#
+# Data dir is a plain bind mount to the host path /root/aisix-data (the same
+# path run.sh used), so the existing config/resources are reused and
+# `docker-compose down` never deletes them.
+#
+# NOTE: the defaults above match the tengxun-hc deployment. For other hosts,
+# override via env or edit the values — the image mirror (ghcr.nju.edu.cn is a
+# mirror of ghcr.io; CI builds to ghcr.io) and the data path are host-specific.
+
 services:
   aisix:
-    image: ${AISIX_IMAGE:-ghcr.io/evlon/aisix-console:latest}
+    image: ${AISIX_IMAGE:-ghcr.nju.edu.cn/evlon/aisix-console:latest}
     container_name: aisix
     ports:
-      - "${AISIX_PROXY_PORT:-3000}:3000"    # proxy
-      - "${AISIX_ADMIN_PORT:-3002}:3002"    # admin (3001 avoided by default)
-      - "${AISIX_METRICS_PORT:-9090}:9090"  # metrics/status
-      - "${AISIX_CONSOLE_PORT:-8787}:8787"  # console UI
+      - "${AISIX_PROXY_PORT:-8480}:3000"      # proxy
+      - "${AISIX_ADMIN_PORT:-3002}:3002"      # admin
+      - "${AISIX_METRICS_PORT:-9090}:9090"    # metrics / status
+      - "${AISIX_CONSOLE_PORT:-8400}:8787"    # console UI
     volumes:
-      - ./aisix-data:/etc/aisix
+      - /root/aisix-data:/etc/aisix
     restart: unless-stopped
