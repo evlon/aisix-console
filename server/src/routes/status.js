@@ -2,7 +2,7 @@
 // gateway. Also secrets names (never values) and misc endpoints.
 import { Router } from 'express';
 import * as secrets from '../secrets.js';
-import { loadFile, loadFileCached, fingerprint, KINDS } from '../resources.js';
+import { loadFile, loadFileCached, fingerprint, fingerprintAsync, KINDS } from '../resources.js';
 
 export function statusRouter(ctx) {
   const router = Router();
@@ -28,7 +28,7 @@ export function statusRouter(ctx) {
         exists: r.exists,
         ok: r.ok,
         error: r.error || null,
-        fingerprint: fingerprint(ctx.cfg.resourcesFile),
+        fingerprint: await fingerprintAsync(ctx.cfg.resourcesFile),
         counts,
       },
     });

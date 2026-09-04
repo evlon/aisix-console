@@ -162,11 +162,32 @@ export function normalizeDoc(doc) {
 }
 
 // sha256 hex of the file contents + mtime, for external-edit detection.
+// Synchronous variant — only for on-demand paths (save validation, resource
+// list/detail). Do NOT call this from the status-poll hot path: a stalled
+// bind mount would block the ENTIRE Node event loop and wedge the console.
 export function fingerprint(filePath) {
   try {
     const stat = fs.statSync(filePath);
     const text = fs.readFileSync(filePath, 'utf8');
     return { mtimeMs: stat.mtimeMs, size: stat.size, sha256: sha256Hex(text) };
+  } catch {
+    return null;
+  }
+}
+
+// Async variant for the status-poll hot path. A stalled bind mount only delays
+// this one promise (never the event loop), and a hard timeout makes the
+// endpoint return even if the volume is wedged — so the console can never be
+// pinned into an unkillable `D` state by a slow /etc/aisix read.
+export async function fingerprintAsync(filePath, timeoutMs = 15000) {
+  const read = (async () => {
+    const st = await fs.promises.stat(filePath);
+    const text = await fs.promises.readFile(filePath, 'utf8');
+    return { mtimeMs: st.mtimeMs, size: st.size, sha256: sha256Hex(text) };
+  })();
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
+  try {
+    return await Promise.race([read, timeout]);
   } catch {
     return null;
   }
