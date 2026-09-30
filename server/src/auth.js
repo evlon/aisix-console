@@ -19,6 +19,35 @@ const LOCK_MS = 15 * 60 * 1000;
 let state = null; // { authFile, password_hash, password_salt, session_secret }
 const loginFails = new Map(); // ip -> { fails, lockUntil }
 
+// The login-failure map is keyed by client IP and is only deleted on a
+// successful login. On a public deployment, scanners/bots probing the login
+// endpoint with ever-changing source IPs would otherwise grow this map
+// without bound for the lifetime of the process — a genuine slow leak. We cap
+// it and prune expired entries so it stays small regardless of traffic.
+const MAX_LOGIN_FAILS = 10000;
+let loginFailsPrunedAt = 0;
+const PRUNE_INTERVAL_MS = 60 * 1000;
+
+function pruneLoginFails(now) {
+  if (now - loginFailsPrunedAt < PRUNE_INTERVAL_MS) return;
+  loginFailsPrunedAt = now;
+  // Drop any record whose lock has fully elapsed — whether it was mid-count
+  // (fails 1..4, never reached the lock) or locked out and now past
+  // lockUntil. Either way the lock is gone, so a fresh attempt starts clean;
+  // keeping the entry would only pin memory for IPs that never return.
+  for (const [ip, rec] of loginFails) {
+    if (rec.lockUntil <= now) loginFails.delete(ip);
+  }
+  if (loginFails.size > MAX_LOGIN_FAILS) {
+    const entries = [...loginFails.entries()].sort(
+      (a, b) => (a[1].lockUntil || 0) - (b[1].lockUntil || 0),
+    );
+    for (const [ip] of entries.slice(0, loginFails.size - MAX_LOGIN_FAILS)) {
+      loginFails.delete(ip);
+    }
+  }
+}
+
 function scryptHash(password, salt) {
   return crypto.scryptSync(String(password), salt, 64).toString('hex');
 }
@@ -135,6 +164,7 @@ export function requireAuth(req, res, next) {
 
 export async function loginHandler(req, res) {
   const ip = req.socket?.remoteAddress || 'unknown';
+  pruneLoginFails(Date.now());
   const record = loginFails.get(ip) || { fails: 0, lockUntil: 0 };
   if (record.lockUntil > Date.now()) {
     return res.status(429).json({ error: 'locked_out' });

@@ -8,6 +8,7 @@ export const useStatusStore = defineStore('status', {
     loading: false,
     lastError: null,
     timer: null,
+    visibilityHandler: null,
   }),
   getters: {
     gatewayReachable: (s) => !!s.data?.gatewayReachable,
@@ -38,6 +39,7 @@ export const useStatusStore = defineStore('status', {
       };
       this.refresh();
       this.timer = setInterval(tick, 5000);
+      this.visibilityHandler = tick;
       document.addEventListener('visibilitychange', tick);
     },
     stopPolling() {
@@ -45,7 +47,10 @@ export const useStatusStore = defineStore('status', {
         clearInterval(this.timer);
         this.timer = null;
       }
-      document.removeEventListener('visibilitychange', () => {});
+      if (this.visibilityHandler) {
+        document.removeEventListener('visibilitychange', this.visibilityHandler);
+        this.visibilityHandler = null;
+      }
     },
   },
 });
