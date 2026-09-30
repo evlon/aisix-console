@@ -18,7 +18,25 @@ const emptyForm = () => ({
   adapter: '',
   api_key: '', // value (if storing to console) or `${VAR}` literal
   keyMode: 'console', // 'console' | 'envref'
+  // Advanced fields (aisix >=1.1.0) surfaced as JSON text boxes so editing
+  // never drops them; empty means "omit".
+  apis_text: '',
+  request_text: '',
+  response_text: '',
+  tls_text: '',
+  resolve_addresses_text: '',
+  strip_headers_text: '',
+  telemetry_tags_text: '',
 });
+
+function parseJsonObj(text, label) {
+  if (!text || !text.trim()) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`${label}: ${e.message}`);
+  }
+}
 
 const form = ref(emptyForm());
 
@@ -49,6 +67,13 @@ function openEdit(e) {
     api_key: '',
     keyMode: /^\$\{[A-Z0-9_]+\}$/.test(e.api_key ?? '') ? 'envref' : 'console',
     envRef: /^\$\{([A-Z0-9_]+)\}$/.exec(e.api_key ?? '')?.[1] || '',
+    apis_text: e.apis ? JSON.stringify(e.apis, null, 2) : '',
+    request_text: e.request ? JSON.stringify(e.request, null, 2) : '',
+    response_text: e.response ? JSON.stringify(e.response, null, 2) : '',
+    tls_text: e.tls ? JSON.stringify(e.tls, null, 2) : '',
+    resolve_addresses_text: e.resolve_addresses ? JSON.stringify(e.resolve_addresses, null, 2) : '',
+    strip_headers_text: e.strip_headers ? JSON.stringify(e.strip_headers, null, 2) : '',
+    telemetry_tags_text: e.telemetry_tags ? JSON.stringify(e.telemetry_tags, null, 2) : '',
   };
   editing.value = e;
   lastResult.value = null;
@@ -77,6 +102,27 @@ async function save() {
       entry.api_key = editing.value.api_key; // keep existing (masked / env ref)
     } else {
       lastResult.value = { ok: false, errors: [{ message: t('providerKeys.apiKey') + ' *' }] };
+      return;
+    }
+
+    // Advanced fields: parse each JSON text box and attach when non-empty.
+    try {
+      const apis = parseJsonObj(form.value.apis_text, 'apis');
+      if (apis !== undefined) entry.apis = apis;
+      const req = parseJsonObj(form.value.request_text, 'request');
+      if (req !== undefined) entry.request = req;
+      const resp = parseJsonObj(form.value.response_text, 'response');
+      if (resp !== undefined) entry.response = resp;
+      const tls = parseJsonObj(form.value.tls_text, 'tls');
+      if (tls !== undefined) entry.tls = tls;
+      const addrs = parseJsonObj(form.value.resolve_addresses_text, 'resolve_addresses');
+      if (addrs !== undefined) entry.resolve_addresses = addrs;
+      const sh = parseJsonObj(form.value.strip_headers_text, 'strip_headers');
+      if (sh !== undefined) entry.strip_headers = sh;
+      const tags = parseJsonObj(form.value.telemetry_tags_text, 'telemetry_tags');
+      if (tags !== undefined) entry.telemetry_tags = tags;
+    } catch (e) {
+      lastResult.value = { ok: false, errors: [{ message: e.message }] };
       return;
     }
 
@@ -199,6 +245,37 @@ onMounted(load);
           />
         </div>
       </div>
+      <details style="margin-top: 12px">
+        <summary>{{ t('providerKeys.advanced') }}</summary>
+        <div class="form-row">
+          <label>apis (JSON)</label>
+          <textarea v-model="form.apis_text" rows="3" style="flex: 1" placeholder='{"messages": {"base": "…/anthropic"}}' />
+        </div>
+        <div class="form-row">
+          <label>request (JSON)</label>
+          <textarea v-model="form.request_text" rows="3" style="flex: 1" placeholder='{"param_renames": {"max_tokens": "max_completion_tokens"}}' />
+        </div>
+        <div class="form-row">
+          <label>response (JSON)</label>
+          <textarea v-model="form.response_text" rows="2" style="flex: 1" placeholder='{"reasoning_field": "delta.reasoning_content"}' />
+        </div>
+        <div class="form-row">
+          <label>tls (JSON)</label>
+          <textarea v-model="form.tls_text" rows="2" style="flex: 1" placeholder='{"ca_cert": "-----BEGIN…", "verify": true}' />
+        </div>
+        <div class="form-row">
+          <label>resolve_addresses (JSON)</label>
+          <textarea v-model="form.resolve_addresses_text" rows="2" style="flex: 1" placeholder='["10.0.0.5"]' />
+        </div>
+        <div class="form-row">
+          <label>strip_headers (JSON)</label>
+          <textarea v-model="form.strip_headers_text" rows="2" style="flex: 1" placeholder='["authorization","cookie"]' />
+        </div>
+        <div class="form-row">
+          <label>telemetry_tags (JSON)</label>
+          <textarea v-model="form.telemetry_tags_text" rows="2" style="flex: 1" placeholder='{"kind": "byo", "pk_label": "prod"}' />
+        </div>
+      </details>
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
         <button @click="editing = null">{{ t('common.cancel') }}</button>
         <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>

@@ -108,6 +108,7 @@ export default {
     envVarPlaceholder: 'OPENAI_API_KEY（不带 ${}）',
     keySet: '••••••••（已设置）',
     keyUnset: '（未设置）',
+    advanced: '高级字段（JSON，留空不写）',
   },
   models: {
     title: '模型',
@@ -193,6 +194,7 @@ export default {
     routingTargetRequired: '路由模型至少需要一个目标模型',
     ensemblePanelRequired: '集成模型至少需要一个面板成员',
     semanticRouteRequired: '语义模型至少需要一个路由',
+    advanced: '高级字段（JSON，留空不写）',
   },
   apiKeys: {
     title: '调用方密钥',
@@ -224,6 +226,7 @@ export default {
     createFlowPrompt: '请选择创建方式',
     noPlaintext: '请粘贴要导入的密钥明文',
     noEnvVar: '请填写环境变量名',
+    advanced: '高级字段（留空不写）',
   },
   policies: {
     title: '策略',
@@ -286,6 +289,11 @@ export default {
     aliyunTextModeration: 'aliyun_text_moderation',
     aliyunAiGuardrail: 'aliyun_ai_guardrail',
     aliyunContentSafety: 'aliyun_content_safety（已拆分）',
+    custom: 'custom（自定义脚本）',
+    grInputMessages: '输入消息范围',
+    rlAdvanced: '高级字段（条件行，JSON 留空不写）',
+    rlActionDefault: '默认（reject）',
+    cacheAdvanced: '高级字段（JSON 留空不写）',
     choose: '选择…',
   },
   resources: {
@@ -302,6 +310,9 @@ export default {
     kindOidc: 'OIDC 提供方',
     kindObs: '可观测性导出器',
     kindClaim: 'Claim 映射',
+    kindGuardrailAttach: '护栏附件',
+    kindPassthrough: '透传路由',
+    kindMcpAuth: 'MCP 认证设置',
   },
   playground: {
     title: '试玩 / 对话',

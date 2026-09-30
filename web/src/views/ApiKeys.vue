@@ -9,6 +9,7 @@ import { sha256Hex } from '../lib/sha256.js';
 const { t } = useI18n();
 const entries = ref([]);
 const models = ref([]);
+const mcpServers = ref([]);
 const loading = ref(false);
 const editing = ref(null);
 const saving = ref(false);
@@ -24,14 +25,45 @@ const form = ref({
   expires_at: '',
   disabled: false,
   rate_rpm: '',
+  // aisix >=1.1.0 extras
+  allowed_agents: '',
+  allowed_routes: '',
+  jwt_provider: '',
+  jwt_subject: '',
+  team_id: '',
+  user_id: '',
+  user_name: '',
+  mcp_access_allow: '',
+  mcp_access_deny: '',
+  mcp_rate_limits: [], // [{ server, rpm, rps, rph, rpd, concurrency }]
 });
+
+const emptyAdvanced = () => ({
+  allowed_agents: '',
+  allowed_routes: '',
+  jwt_provider: '',
+  jwt_subject: '',
+  team_id: '',
+  user_id: '',
+  user_name: '',
+  mcp_access_allow: '',
+  mcp_access_deny: '',
+  mcp_rate_limits: [],
+});
+
+const strArr = (v) =>
+  String(v || '')
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 async function load() {
   loading.value = true;
   try {
-    const [k, m] = await Promise.all([api.list('api_keys'), api.list('models')]);
+    const [k, m, s] = await Promise.all([api.list('api_keys'), api.list('models'), api.list('mcp_servers')]);
     entries.value = k.entries ?? [];
     models.value = (m.entries ?? []).map((e) => e.display_name).filter(Boolean);
+    mcpServers.value = (s.entries ?? []).map((e) => e.name || e.display_name).filter(Boolean);
   } catch (e) {
     lastResult.value = { ok: false, errors: [{ message: e.message }] };
   } finally {
@@ -40,13 +72,21 @@ async function load() {
 }
 
 function openCreate() {
-  form.value = { display_name: '', mode: 'generate', importPlaintext: '', envRef: '', allowed_models: ['*'], expires_at: '', disabled: false, rate_rpm: '' };
+  form.value = { display_name: '', mode: 'generate', importPlaintext: '', envRef: '', allowed_models: ['*'], expires_at: '', disabled: false, rate_rpm: '', ...emptyAdvanced() };
   editing.value = {};
   lastResult.value = null;
   generatedPlaintext.value = '';
 }
 
 function openEdit(e) {
+  const mrl = Object.entries(e.mcp_rate_limits ?? {}).map(([server, v]) => ({
+    server,
+    rpm: v.rpm ?? '',
+    rps: v.rps ?? '',
+    rph: v.rph ?? '',
+    rpd: v.rpd ?? '',
+    concurrency: v.concurrency ?? '',
+  }));
   form.value = {
     display_name: e.display_name ?? '',
     mode: 'generate',
@@ -56,6 +96,16 @@ function openEdit(e) {
     expires_at: e.expires_at ?? '',
     disabled: !!e.disabled,
     rate_rpm: e.rate_limit?.rpm ?? '',
+    allowed_agents: (e.allowed_agents ?? []).join(', '),
+    allowed_routes: (e.allowed_routes ?? []).join(', '),
+    jwt_provider: e.jwt_provider ?? '',
+    jwt_subject: e.jwt_subject ?? '',
+    team_id: e.team_id ?? '',
+    user_id: e.user_id ?? '',
+    user_name: e.user_name ?? '',
+    mcp_access_allow: (e.mcp_access?.allow ?? []).join('\n'),
+    mcp_access_deny: (e.mcp_access?.deny ?? []).join('\n'),
+    mcp_rate_limits: mrl,
   };
   editing.value = e;
   lastResult.value = null;
@@ -66,6 +116,12 @@ function addAllowedModel() {
 }
 function removeAllowedModel(i) {
   form.value.allowed_models.splice(i, 1);
+}
+function addMcpRateLimit() {
+  form.value.mcp_rate_limits.push({ server: '', rpm: '', rps: '', rph: '', rpd: '', concurrency: '' });
+}
+function removeMcpRateLimit(i) {
+  form.value.mcp_rate_limits.splice(i, 1);
 }
 
 async function save() {
@@ -80,6 +136,39 @@ async function save() {
   if (form.value.rate_rpm !== '') entry.rate_limit = { rpm: Number(form.value.rate_rpm) };
   if (form.value.expires_at) entry.expires_at = new Date(form.value.expires_at).toISOString();
   if (form.value.disabled) entry.disabled = true;
+
+  // aisix >=1.1.0 extras — attach only when set (empty = omit, so editing
+  // never drops a field the form does not model).
+  const agents = strArr(form.value.allowed_agents);
+  if (agents.length) entry.allowed_agents = agents;
+  const routes = strArr(form.value.allowed_routes);
+  if (routes.length) entry.allowed_routes = routes;
+  if (form.value.jwt_provider) entry.jwt_provider = form.value.jwt_provider;
+  if (form.value.jwt_subject) entry.jwt_subject = form.value.jwt_subject;
+  if (form.value.team_id) entry.team_id = form.value.team_id;
+  if (form.value.user_id) entry.user_id = form.value.user_id;
+  if (form.value.user_name) entry.user_name = form.value.user_name;
+  // mcp_access: multiline glob lists -> { allow, deny } (omit if both empty).
+  const allow = strArr(form.value.mcp_access_allow);
+  const deny = strArr(form.value.mcp_access_deny);
+  if (allow.length || deny.length) {
+    entry.mcp_access = {};
+    if (allow.length) entry.mcp_access.allow = allow;
+    if (deny.length) entry.mcp_access.deny = deny;
+  }
+  // mcp_rate_limits: [{server, rpm, ...}] -> { "<server>": { rpm, ... } }.
+  const mrl = {};
+  for (const row of form.value.mcp_rate_limits) {
+    const server = (row.server || '').trim();
+    if (!server) continue;
+    const limits = {};
+    for (const dim of ['rpm', 'rps', 'rph', 'rpd', 'concurrency']) {
+      const v = row[dim];
+      if (v !== '' && v !== undefined && v !== null) limits[dim] = Number(v);
+    }
+    if (Object.keys(limits).length) mrl[server] = limits;
+  }
+  if (Object.keys(mrl).length) entry.mcp_rate_limits = mrl;
 
   const isEdit = !!editing.value?.display_name;
   if (isEdit) {
@@ -257,6 +346,69 @@ onMounted(load);
           <label>{{ t('common.disabled') }}</label>
           <label style="justify-self: start"><input type="checkbox" v-model="form.disabled" /></label>
         </div>
+        <details style="margin-top: 10px">
+          <summary>{{ t('apiKeys.advanced') }}</summary>
+          <div class="form-row">
+            <label>allowed_agents</label>
+            <input v-model="form.allowed_agents" placeholder="*, agent-a" />
+          </div>
+          <div class="form-row">
+            <label>allowed_routes</label>
+            <input v-model="form.allowed_routes" placeholder="*, route-a" />
+          </div>
+          <div class="form-row">
+            <label>jwt_provider</label>
+            <input v-model="form.jwt_provider" placeholder="oidc provider name" />
+          </div>
+          <div class="form-row">
+            <label>jwt_subject</label>
+            <input v-model="form.jwt_subject" placeholder="external identity" />
+          </div>
+          <div class="form-row">
+            <label>team_id</label>
+            <input v-model="form.team_id" />
+          </div>
+          <div class="form-row">
+            <label>user_id</label>
+            <input v-model="form.user_id" />
+          </div>
+          <div class="form-row">
+            <label>user_name</label>
+            <input v-model="form.user_name" />
+          </div>
+          <div class="form-row">
+            <label>mcp_access.allow</label>
+            <div style="flex: 1">
+              <textarea v-model="form.mcp_access_allow" rows="3" style="width: 100%" placeholder="每行一个 <server>__<tool> glob，如&#10;demo-mcp__*&#10;github__search_repositories" />
+              <div style="margin-top: 4px">
+                <span class="muted" style="font-size: 12px">插入服务器：</span>
+                <button v-for="s in mcpServers" :key="s" @click="form.mcp_access_allow = (form.mcp_access_allow ? form.mcp_access_allow + '\n' : '') + s + '__*'" style="margin: 2px">{{ s }}__*</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>mcp_access.deny</label>
+            <textarea v-model="form.mcp_access_deny" rows="3" style="flex: 1" placeholder="每行一个 <server>__<tool> glob" />
+          </div>
+          <div class="form-row">
+            <label>mcp_rate_limits</label>
+            <div style="flex: 1">
+              <div v-for="(row, i) in form.mcp_rate_limits" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center; flex-wrap: wrap">
+                <select v-model="row.server" style="min-width: 140px">
+                  <option value="">选择 MCP 服务器…</option>
+                  <option v-for="s in mcpServers" :key="s" :value="s">{{ s }}</option>
+                </select>
+                <input v-model="row.rpm" type="number" placeholder="rpm" style="width: 70px" />
+                <input v-model="row.rps" type="number" placeholder="rps" style="width: 70px" />
+                <input v-model="row.rph" type="number" placeholder="rph" style="width: 70px" />
+                <input v-model="row.rpd" type="number" placeholder="rpd" style="width: 70px" />
+                <input v-model="row.concurrency" type="number" placeholder="并发" style="width: 70px" />
+                <button @click="removeMcpRateLimit(i)">✕</button>
+              </div>
+              <button @click="addMcpRateLimit">+ 添加服务器限额</button>
+            </div>
+          </div>
+        </details>
         <div class="muted" v-if="editing.display_name" style="font-size: 12px; margin-bottom: 8px">{{ t('apiKeys.immutableHint') }}</div>
 
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">

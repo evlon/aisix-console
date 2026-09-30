@@ -63,8 +63,17 @@ function emptyGuardrail(kind) {
     enforcement_mode: 'block',
     fail_open: true,
     direction: 'both',
+    input_messages: 'all',
+    extra_json_text: '',
   };
   if (kind === 'keyword') base.patterns = [{ kind: 'literal', value: '' }];
+  else if (kind === 'custom') {
+    base.script = '';
+    base.timeout_ms = '';
+    base.output_fail_open = false;
+    base.max_buffer_bytes = '';
+    base.on_buffer_exceeded = 'fail_closed';
+  }
   else if (kind === 'pii') {
     base.default_action = 'mask';
     base.detectors = [];
@@ -159,10 +168,10 @@ function emptyGuardrail(kind) {
 
 function emptyEntry() {
   if (activeKind.value === 'rate_limit_policies') {
-    return { name: '', scope: 'api_key', scope_ref: '', window: 'minute', max_requests: '', max_tokens: '' };
+    return { name: '', scope: 'api_key', scope_ref: '', window: 'minute', max_requests: '', max_tokens: '', action: '', conditions_text: '', group_by_text: '', limits_text: '', schedules_text: '' };
   }
   if (activeKind.value === 'cache_policies') {
-    return { name: '', enabled: true, backend: 'memory', ttl_seconds: 3600, applies_to: 'all', scope: 'api_key', purge_generation: 0 };
+    return { name: '', enabled: true, backend: 'memory', ttl_seconds: 3600, applies_type: 'all', applies_ref: '', scope: 'api_key', purge_generation: 0, semantic_text: '' };
   }
   return emptyGuardrail('keyword');
 }
@@ -183,12 +192,19 @@ function flattenGuardrail(f, e) {
   f.enforcement_mode = e.enforcement_mode ?? 'block';
   f.fail_open = e.fail_open ?? true;
   f.direction = e.direction ?? 'both';
+  f.input_messages = e.input_messages ?? 'all';
   if (e.created_at) f.created_at = e.created_at;
   const k = e.kind;
   if (k === 'keyword') {
     f.patterns = Array.isArray(e.patterns) && e.patterns.length
       ? e.patterns.map((p) => (typeof p === 'string' ? { kind: 'literal', value: p } : { kind: p.kind ?? 'literal', value: p.value ?? '' }))
       : [{ kind: 'literal', value: '' }];
+  } else if (k === 'custom') {
+    f.script = e.script ?? '';
+    f.timeout_ms = e.timeout_ms ?? '';
+    f.output_fail_open = !!e.output_fail_open;
+    f.max_buffer_bytes = e.max_buffer_bytes ?? '';
+    f.on_buffer_exceeded = e.on_buffer_exceeded ?? 'fail_closed';
   } else if (k === 'pii') {
     f.default_action = e.default_action ?? 'mask';
     f.detectors = Array.isArray(e.detectors) ? e.detectors.map((d) => ({ type: d.type ?? '', action: d.action ?? '' })) : [];
@@ -288,6 +304,24 @@ function openEdit(e) {
   if (activeKind.value === 'rate_limit_policies') {
     f.max_requests = e.max_requests ?? '';
     f.max_tokens = e.max_tokens ?? '';
+    f.action = e.action ?? '';
+    f.conditions_text = e.conditions ? JSON.stringify(e.conditions, null, 2) : '';
+    f.group_by_text = e.group_by ? JSON.stringify(e.group_by, null, 2) : '';
+    f.limits_text = e.limits ? JSON.stringify(e.limits, null, 2) : '';
+    f.schedules_text = e.schedules ? JSON.stringify(e.schedules, null, 2) : '';
+  }
+  if (activeKind.value === 'cache_policies') {
+    f.semantic_text = e.semantic ? JSON.stringify(e.semantic, null, 2) : '';
+    // Split applies_to ("all" | "model:<name>" | "api_key:<name>") into type+ref.
+    const at = e.applies_to ?? 'all';
+    const m = /^([a-z_]+):(.+)$/.exec(at);
+    if (m) {
+      f.applies_type = m[1];
+      f.applies_ref = m[2];
+    } else {
+      f.applies_type = at;
+      f.applies_ref = '';
+    }
   }
   if (activeKind.value === 'guardrails') {
     flattenGuardrail(f, e);
@@ -315,18 +349,39 @@ function buildEntry() {
     out.window = f.window;
     if (f.max_requests !== '') out.max_requests = Number(f.max_requests);
     if (f.max_tokens !== '') out.max_tokens = Number(f.max_tokens);
+    // aisix >=1.3.0 conditional-form extras (JSON text box; empty = omit,
+    // so editing never drops action/conditions/group_by/limits/schedules).
+    const conditions = parseJsonObj(f.conditions_text, 'conditions');
+    if (conditions !== undefined) out.conditions = conditions;
+    const gb = parseJsonObj(f.group_by_text, 'group_by');
+    if (gb !== undefined) out.group_by = gb;
+    const limits = parseJsonObj(f.limits_text, 'limits');
+    if (limits !== undefined) out.limits = limits;
+    const schedules = parseJsonObj(f.schedules_text, 'schedules');
+    if (schedules !== undefined) out.schedules = schedules;
+    if (f.action) out.action = f.action;
     return out;
   }
   if (activeKind.value === 'cache_policies') {
-    return {
+    const out = {
       name: f.name,
       enabled: !!f.enabled,
       backend: f.backend,
       ttl_seconds: Number(f.ttl_seconds || 3600),
-      applies_to: f.applies_to || 'all',
       scope: f.scope,
       purge_generation: Number(f.purge_generation || 0),
     };
+    // applies_type + applies_ref -> applies_to ("all" | "model:<name>" | "api_key:<name>").
+    const t = f.applies_type || 'all';
+    if (t === 'all' || !f.applies_ref) {
+      out.applies_to = 'all';
+    } else {
+      out.applies_to = `${t}:${f.applies_ref}`;
+    }
+    // aisix >=1.2.0 semantic cache (JSON text box; empty = omit)
+    const semantic = parseJsonObj(f.semantic_text, 'semantic');
+    if (semantic !== undefined) out.semantic = semantic;
+    return out;
   }
   // guardrail — common fields
   const out = {
@@ -338,11 +393,22 @@ function buildEntry() {
     fail_open: !!f.fail_open,
     direction: f.direction,
   };
+  if (f.input_messages && f.input_messages !== 'all') out.input_messages = f.input_messages;
   if (f.created_at) out.created_at = f.created_at;
   const num = (v) => (v === '' || v === undefined || v === null ? undefined : Number(v));
   if (f.kind === 'keyword') {
     out.patterns = (f.patterns || []).map((p) => ({ kind: p.kind || 'literal', value: (p.value || '').trim() })).filter((p) => p.value);
     if (!out.patterns.length) throw new Error(t('policies.grPatterns') + ' *');
+  } else if (f.kind === 'custom') {
+    if (!f.script || !f.script.trim()) throw new Error('script *');
+    out.script = f.script;
+    const to = num(f.timeout_ms);
+    if (to !== undefined) out.timeout_ms = to;
+    out.output_fail_open = !!f.output_fail_open;
+    const obe = f.on_buffer_exceeded;
+    if (obe) out.on_buffer_exceeded = obe;
+    const mbb = num(f.max_buffer_bytes);
+    if (mbb !== undefined) out.max_buffer_bytes = mbb;
   } else if (f.kind === 'pii') {
     out.default_action = f.default_action;
     out.detectors = (f.detectors || []).filter((d) => d.type && d.type.trim()).map((d) => ({ type: d.type.trim(), ...(d.action ? { action: d.action } : {}) }));
@@ -639,6 +705,7 @@ onMounted(load);
               <option value="second">second</option>
               <option value="minute">minute</option>
               <option value="hour">hour</option>
+              <option value="day">day</option>
             </select>
           </div>
           <div class="form-row">
@@ -648,6 +715,32 @@ onMounted(load);
               <input v-model="form.max_tokens" type="number" :placeholder="t('policies.rlMaxTokens')" style="flex: 1" />
             </div>
           </div>
+          <details style="margin-top: 10px">
+            <summary>{{ t('policies.rlAdvanced') }}</summary>
+            <div class="form-row">
+              <label>action</label>
+              <select v-model="form.action">
+                <option value="">{{ t('policies.rlActionDefault') }}</option>
+                <option value="reject">reject</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>conditions (JSON)</label>
+              <textarea v-model="form.conditions_text" rows="4" style="flex: 1" placeholder='[{"dimension":"api_key","operator":"in","value":["k1"]}]' />
+            </div>
+            <div class="form-row">
+              <label>group_by (JSON)</label>
+              <textarea v-model="form.group_by_text" rows="2" style="flex: 1" placeholder='["model","provider"]' />
+            </div>
+            <div class="form-row">
+              <label>limits (JSON)</label>
+              <textarea v-model="form.limits_text" rows="4" style="flex: 1" placeholder='{"rate": {"second": 10}, "tokens": {"minute": 100000}}' />
+            </div>
+            <div class="form-row">
+              <label>schedules (JSON)</label>
+              <textarea v-model="form.schedules_text" rows="3" style="flex: 1" placeholder='[{"start":"09:00","end":"17:00","weekdays":["mon"]}]' />
+            </div>
+          </details>
         </template>
 
         <!-- cache policy -->
@@ -673,7 +766,21 @@ onMounted(load);
           </div>
           <div class="form-row">
             <label>{{ t('policies.cacheAppliesTo') }}</label>
-            <input v-model="form.applies_to" placeholder="all / model:xxx / api_key:xxx" />
+            <div style="display: flex; gap: 6px; flex: 1">
+              <select v-model="form.applies_type" style="width: 130px">
+                <option value="all">all</option>
+                <option value="model">model</option>
+                <option value="api_key">api_key</option>
+              </select>
+              <select v-if="form.applies_type === 'model'" v-model="form.applies_ref" style="flex: 1">
+                <option value="">{{ t('policies.choose') }}</option>
+                <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+              </select>
+              <select v-else-if="form.applies_type === 'api_key'" v-model="form.applies_ref" style="flex: 1">
+                <option value="">{{ t('policies.choose') }}</option>
+                <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
+              </select>
+            </div>
           </div>
           <div class="form-row">
             <label>{{ t('policies.cacheScope') }}</label>
@@ -682,6 +789,13 @@ onMounted(load);
               <option value="env">{{ t('policies.cacheScopeEnv') }}</option>
             </select>
           </div>
+          <details style="margin-top: 10px">
+            <summary>{{ t('policies.cacheAdvanced') }}</summary>
+            <div class="form-row">
+              <label>semantic (JSON)</label>
+              <textarea v-model="form.semantic_text" rows="4" style="flex: 1" placeholder='{"embedding_model": "text-embedding", "match_threshold": 0.9, "ttl_seconds": 300}' />
+            </div>
+          </details>
         </template>
 
         <!-- guardrail -->
@@ -703,6 +817,14 @@ onMounted(load);
               <option value="bedrock">{{ t('policies.bedrock') }}</option>
               <option value="aliyun_text_moderation">{{ t('policies.aliyunTextModeration') }}</option>
               <option value="aliyun_ai_guardrail">{{ t('policies.aliyunAiGuardrail') }}</option>
+              <option value="custom">{{ t('policies.custom') }}</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>{{ t('policies.grInputMessages') }}</label>
+            <select v-model="form.input_messages">
+              <option value="all">all</option>
+              <option value="last">last</option>
             </select>
           </div>
           <div class="form-row">
@@ -743,6 +865,33 @@ onMounted(load);
                 </div>
                 <button @click="form.patterns.push({ kind: 'literal', value: '' })">+ {{ t('common.add') }}</button>
               </div>
+            </div>
+          </template>
+
+          <!-- custom (operator-supplied script) -->
+          <template v-else-if="form.kind === 'custom'">
+            <div class="form-row">
+              <label>script *</label>
+              <textarea v-model="form.script" rows="8" style="flex: 1" placeholder="export async function checkInput(ctx) { … }" />
+            </div>
+            <div class="form-row">
+              <label>timeout_ms</label>
+              <input v-model="form.timeout_ms" type="number" />
+            </div>
+            <div class="form-row">
+              <label>max_buffer_bytes</label>
+              <input v-model="form.max_buffer_bytes" type="number" />
+            </div>
+            <div class="form-row">
+              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <select v-model="form.on_buffer_exceeded">
+                <option value="fail_closed">fail_closed</option>
+                <option value="fail_open">fail_open</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
             </div>
           </template>
 

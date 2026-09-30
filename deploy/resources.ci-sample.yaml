@@ -15,11 +15,17 @@ provider_keys:
     provider: openai
     api_base: https://api.openai.com/v1
     api_key: sk-example-openai
+    telemetry_tags:
+      kind: byo
+      byo_label: openai-prod
   - display_name: deepseek
     provider: openai
     api_base: https://api.deepseek.com
     adapter: openai
     api_key: sk-example-deepseek
+    request:
+      param_renames:
+        max_tokens: max_completion_tokens
 
 models:
   - display_name: gpt-4o
@@ -42,6 +48,15 @@ api_keys:
     allowed_models:
       - "*"
     key_hash: 91ed2dbc407561556f3e7be98ba0bd2a57986d6a868c482d867d19c6d40d201c
+    mcp_access:
+      allow:
+        - "demo-mcp__*"
+    mcp_rate_limits:
+      demo-mcp:
+        rpm: 60
+  - display_name: anon-principal
+    allowed_models: []
+    key_hash: 5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a
 
 guardrails:
   - name: global-keyword
@@ -49,6 +64,12 @@ guardrails:
     patterns:
       - kind: literal
         value: blocked-phrase
+
+guardrail_attachments:
+  - guardrail_id: global-keyword
+    scope_type: model
+    scope_id: gpt-4o
+    priority: 10
 
 mcp_servers:
   - name: demo-mcp
@@ -95,3 +116,24 @@ claim_mappings:
           - finance
     resolve:
       api_key: local-dev
+
+passthrough_routes:
+  - name: internal-echo
+    path_prefix: /internal/echo
+    target_url: https://httpbin.org
+    provider_key: openai-prod
+  - name: header-key-route
+    hosts: ["api.example.com"]
+    preserve_host: true
+    auth_mode: header_key
+    auth_header_name: x-aisix-api-key
+    credential_mode: forward_client
+  - name: anon-route
+    path_prefix: /internal/anon
+    target_url: https://httpbin.org
+    auth_mode: anonymous
+    anonymous_key: anon-principal
+    source_cidrs: ["0.0.0.0/0", "::/0"]
+    provider_key: openai-prod
+
+mcp_auth_settings: []

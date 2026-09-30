@@ -107,6 +107,7 @@ export default {
     envVarPlaceholder: 'OPENAI_API_KEY (without ${})',
     keySet: '•••••••• (set)',
     keyUnset: '(unset)',
+    advanced: 'Advanced fields (JSON, omitted when empty)',
   },
   models: {
     title: 'Models',
@@ -192,6 +193,7 @@ export default {
     routingTargetRequired: 'Routing model needs at least one target',
     ensemblePanelRequired: 'Ensemble model needs at least one panel member',
     semanticRouteRequired: 'Semantic model needs at least one route',
+    advanced: 'Advanced fields (JSON, omitted when empty)',
   },
   apiKeys: {
     title: 'Caller API Keys',
@@ -223,6 +225,7 @@ export default {
     createFlowPrompt: 'Choose a creation method',
     noPlaintext: 'Paste the plaintext API key to import',
     noEnvVar: 'Enter the environment variable name',
+    advanced: 'Advanced fields (omitted when empty)',
   },
   policies: {
     title: 'Policies',
@@ -285,6 +288,11 @@ export default {
     aliyunTextModeration: 'aliyun_text_moderation',
     aliyunAiGuardrail: 'aliyun_ai_guardrail',
     aliyunContentSafety: 'aliyun_content_safety (split)',
+    custom: 'custom (operator script)',
+    grInputMessages: 'Input messages',
+    rlAdvanced: 'Advanced (conditional row, JSON omitted when empty)',
+    rlActionDefault: 'default (reject)',
+    cacheAdvanced: 'Advanced (JSON omitted when empty)',
     choose: 'Select…',
   },
   resources: {
@@ -301,6 +309,9 @@ export default {
     kindOidc: 'OIDC Providers',
     kindObs: 'Observability Exporters',
     kindClaim: 'Claim Mappings',
+    kindGuardrailAttach: 'Guardrail Attachments',
+    kindPassthrough: 'Passthrough Routes',
+    kindMcpAuth: 'MCP Auth Settings',
   },
   playground: {
     title: 'Playground',

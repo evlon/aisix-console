@@ -22,7 +22,17 @@ const providerModelsMsg = ref('');
 const emptyForm = () => ({
   display_name: '',
   shape: 'direct',
-  direct: { provider: 'openai', model_name: '', provider_key: '', auto_prompt_caching: false },
+  direct: {
+    provider: 'openai',
+    model_name: '',
+    provider_key: '',
+    auto_prompt_caching: false,
+    // aisix >=1.1.0 direct-model extras (JSON text boxes; empty = omit)
+    embedding_text: '',
+    background_model_check_text: '',
+    effort_mapping_text: '',
+    pricing_key: '',
+  },
   routing: {
     strategy: 'failover',
     targets: [{ model: '', weight: '', tags: '' }],
@@ -58,7 +68,7 @@ const emptyForm = () => ({
 
 const form = ref(emptyForm());
 
-const strategyOptions = ['round_robin', 'weighted', 'failover', 'least_cost', 'least_latency', 'least_busy'];
+const strategyOptions = ['round_robin', 'consistent_hash', 'failover', 'least_cost', 'least_latency', 'least_busy'];
 const shapeLabels = {
   direct: () => t('models.shapeDirect'),
   routing: () => t('models.shapeRouting'),
@@ -174,6 +184,10 @@ function openEdit(e) {
     model_name: e.model_name ?? '',
     provider_key: e.provider_key ?? e.provider_key_id ?? '',
     auto_prompt_caching: !!e.auto_prompt_caching,
+    embedding_text: e.embedding ? JSON.stringify(e.embedding, null, 2) : '',
+    background_model_check_text: e.background_model_check ? JSON.stringify(e.background_model_check, null, 2) : '',
+    effort_mapping_text: e.effort_mapping ? JSON.stringify(e.effort_mapping, null, 2) : '',
+    pricing_key: e.pricing_key ?? '',
   };
   const r = e.routing || {};
   f.routing = {
@@ -239,6 +253,14 @@ const strArr = (v) =>
     .split(/[,\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
+function parseJsonObj(text, label) {
+  if (!text || !text.trim()) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`${label}: ${e.message}`);
+  }
+}
 
 function buildEntry() {
   const f = form.value;
@@ -271,8 +293,17 @@ function buildEntry() {
     entry.provider = f.direct.provider;
     entry.model_name = f.direct.model_name;
     entry.provider_key = f.direct.provider_key;
-    if (f.direct.auto_prompt_caching) entry.auto_prompt_caching = {};
+    if (f.direct.auto_prompt_caching) entry.auto_prompt_caching = { enabled: true };
     if (c.cooldown) entry.cooldown = { enabled: true };
+    if (f.direct.pricing_key) entry.pricing_key = f.direct.pricing_key;
+    // JSON text boxes — parse and attach when non-empty (empty = omit, so
+    // editing never drops a field the form does not model).
+    const emb = parseJsonObj(f.direct.embedding_text, 'embedding');
+    if (emb !== undefined) entry.embedding = emb;
+    const bmc = parseJsonObj(f.direct.background_model_check_text, 'background_model_check');
+    if (bmc !== undefined) entry.background_model_check = bmc;
+    const em = parseJsonObj(f.direct.effort_mapping_text, 'effort_mapping');
+    if (em !== undefined) entry.effort_mapping = em;
   } else if (f.shape === 'routing') {
     const r = f.routing;
     const targets = r.targets
@@ -291,7 +322,6 @@ function buildEntry() {
     const fb = strArr(r.fallback_on_statuses);
     if (fb.length) entry.routing.fallback_on_statuses = fb;
     entry.routing.when_all_unavailable = r.when_all_unavailable;
-    if (r.sticky) entry.routing.sticky = {};
   } else if (f.shape === 'ensemble') {
     const en = f.ensemble;
     const panel = en.panel
@@ -483,6 +513,25 @@ onMounted(load);
             <label>{{ t('models.cooldown') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.common.cooldown" /> {{ t('models.cooldownHint') }}</label>
           </div>
+          <details style="margin-top: 10px">
+            <summary>{{ t('models.advanced') }}</summary>
+            <div class="form-row">
+              <label>embedding (JSON)</label>
+              <textarea v-model="form.direct.embedding_text" rows="2" style="flex: 1" placeholder='{"dimensions": 1536, "normalize": true}' />
+            </div>
+            <div class="form-row">
+              <label>background_model_check (JSON)</label>
+              <textarea v-model="form.direct.background_model_check_text" rows="4" style="flex: 1" placeholder='{"enabled": true, "interval_seconds": 60, …}' />
+            </div>
+            <div class="form-row">
+              <label>effort_mapping (JSON)</label>
+              <textarea v-model="form.direct.effort_mapping_text" rows="2" style="flex: 1" placeholder='{"*": "high"}' />
+            </div>
+            <div class="form-row">
+              <label>pricing_key</label>
+              <input v-model="form.direct.pricing_key" placeholder="shared pricing doc name" />
+            </div>
+          </details>
         </template>
 
         <!-- routing -->
@@ -528,10 +577,6 @@ onMounted(load);
           <div class="form-row">
             <label>{{ t('models.retry429') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.routing.retry_on_429" /></label>
-          </div>
-          <div class="form-row">
-            <label>{{ t('models.stickyHash') }}</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.routing.sticky" /> {{ t('models.stickyHint') }}</label>
           </div>
         </template>
 

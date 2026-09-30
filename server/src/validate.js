@@ -68,6 +68,7 @@ export function friendlyScope(scope) {
       models: '模型',
       api_keys: '调用方 API Key',
       guardrails: '护栏',
+      guardrail_attachments: '护栏附件',
       mcp_servers: 'MCP 服务器',
       a2a_agents: 'A2A Agent',
       cache_policies: '缓存策略',
@@ -75,6 +76,8 @@ export function friendlyScope(scope) {
       rate_limit_policies: '限流策略',
       oidc_providers: 'OIDC Provider',
       claim_mappings: 'Claim 映射',
+      passthrough_routes: '透传路由',
+      mcp_auth_settings: 'MCP 认证设置',
     };
     const label = kindLabels[m[1]] || m[1];
     const name = m[3] || '';

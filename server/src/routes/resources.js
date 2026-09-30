@@ -9,9 +9,11 @@ import {
   bootstrapTemplate,
   serialize,
   IDENTITY_FIELD,
+  identityFieldOf,
   findIndex,
   identityOf,
   fingerprint,
+  deriveId,
 } from '../resources.js';
 import * as secrets from '../secrets.js';
 
@@ -87,6 +89,27 @@ export function resourcesRouter(ctx) {
     res.json({ entries: doc[kind] ?? [], fingerprint: fingerprint(ctx.cfg.resourcesFile) });
   });
 
+  // Derived-id map for a kind: [{identity, id}] where id = uuid5("<kind>/<identity>").
+  // Needed by the UI only where upstream has no name sugar for a reference
+  // (mcp_auth_settings.anonymous.api_key_id) — lets operators pick a name and
+  // have the console write the canonical UUID the gateway actually expects.
+  router.get('/:kind/derived-ids', (req, res) => {
+    const { kind } = req.params;
+    if (!(kind in IDENTITY_FIELD)) {
+      return res.status(404).json({ error: `未知资源类型: ${kind}` });
+    }
+    const { doc, error } = currentDoc();
+    if (error) return res.status(409).json(error);
+    const entries = doc[kind] ?? [];
+    const rows = [];
+    for (const entry of entries) {
+      const identity = identityOf(kind, entry);
+      if (!identity) continue;
+      rows.push({ identity, id: deriveId(kind, identity) });
+    }
+    res.json({ rows });
+  });
+
   router.post('/:kind', async (req, res) => {
     const { kind } = req.params;
     if (!(kind in IDENTITY_FIELD)) {
@@ -101,12 +124,12 @@ export function resourcesRouter(ctx) {
     }
     const identity = identityOf(kind, entry);
     if (!identity) {
-      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${IDENTITY_FIELD[kind]}` }] });
+      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${identityFieldOf(kind) || 'identity'}` }] });
     }
     const arr = doc[kind];
     const idx = findIndex(arr, kind, identity);
     if (idx >= 0) {
-      return res.status(409).json({ errors: [{ scope: `${kind}[${idx}] ("${identity}")`, message: `${IDENTITY_FIELD[kind]} 已存在，请使用更新操作` }] });
+      return res.status(409).json({ errors: [{ scope: `${kind}[${idx}] ("${identity}")`, message: `${identityFieldOf(kind) || 'identity'} 已存在，请使用更新操作` }] });
     }
     arr.push(entry);
     const result = await saver.save(doc);
@@ -133,14 +156,14 @@ export function resourcesRouter(ctx) {
     }
     const newIdentity = identityOf(kind, entry);
     if (!newIdentity) {
-      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${IDENTITY_FIELD[kind]}` }] });
+      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${identityFieldOf(kind) || 'identity'}` }] });
     }
     const arr = doc[kind];
     const idx = findIndex(arr, kind, identity);
     if (idx < 0) return res.status(404).json({ error: '未找到' });
     const dupIdx = findIndex(arr, kind, newIdentity);
     if (dupIdx >= 0 && dupIdx !== idx) {
-      return res.status(409).json({ errors: [{ scope: `${kind}[${dupIdx}] ("${newIdentity}")`, message: `${IDENTITY_FIELD[kind]} 与另一条目冲突` }] });
+      return res.status(409).json({ errors: [{ scope: `${kind}[${dupIdx}] ("${newIdentity}")`, message: `${identityFieldOf(kind) || 'identity'} 与另一条目冲突` }] });
     }
     arr[idx] = entry;
     const result = await saver.save(doc);
