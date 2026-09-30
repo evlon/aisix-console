@@ -86,10 +86,12 @@ async function save() {
   }
   saving.value = true;
   try {
-    const entry = { ...form.value };
-    delete entry.keyMode;
-    delete entry.envRef;
-    delete entry.api_key;
+    const entry = {
+      display_name: form.value.display_name,
+      provider: form.value.provider || undefined,
+      api_base: form.value.api_base || undefined,
+      adapter: form.value.adapter || undefined,
+    };
 
     if (form.value.keyMode === 'envref') {
       const varName = form.value.envRef || `EXISTING_VAR`;
