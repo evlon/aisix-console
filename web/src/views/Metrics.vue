@@ -227,7 +227,7 @@ onBeforeUnmount(stopPolling);
       <span class="badge" :class="overview.reachable ? 'ok' : 'err'">{{ overview.reachable ? t('metrics.reachable') : t('metrics.unreachable') }}</span>
       · {{ t('metrics.lastScrape') }}：{{ fmtTs(overview.lastScrapeAt) }}
       · {{ t('metrics.seriesCount') }}：{{ fmtNum(overview.seriesCount) }}
-      · {{ t('metrics.retention') }}：{{ overview.retentionDays }}
+      · {{ t('metrics.retention') }}：{{ overview.retentionHours }}
     </div>
     <div v-if="error" class="error-box">{{ error }}</div>
 

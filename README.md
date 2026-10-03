@@ -91,14 +91,14 @@ npm start
 | `playgroundTimeoutMs` | 试玩请求超时（毫秒），防上游挂起卡死界面 |
 | `metricsDb` | 用量数据点 SQLite 落盘路径（默认 `data/metrics.db`） |
 | `metricsScrapeIntervalSeconds` | 抓取网关 `/metrics` 间隔（默认 10 秒） |
-| `metricsRetentionDays` | 用量数据保留天数，到期自动清理（默认 7 天） |
+| `metricsRetentionHours` | 用量数据保留时长（小时），到期自动清理并回收磁盘（默认 1 小时，主动设置才更长） |
 | `reloadCommand` | 保存后重载命令；单容器部署用 `kill -HUP $(cat /run/aisix.pid)`；留空则提示手动重载 |
 
-环境变量覆盖：`CONSOLE_PORT`、`CONSOLE_BIND`、`CONSOLE_RESOURCES_FILE`、`CONSOLE_AISIX_BIN`、`CONSOLE_AUTH_FILE`、`CONSOLE_RELOAD_COMMAND`、`CONSOLE_PLAYGROUND_TIMEOUT_MS`、`CONSOLE_CONFIG`、`CONSOLE_DEFAULT_PASSWORD`、`CONSOLE_METRICS_DB`、`CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS`、`CONSOLE_METRICS_RETENTION_DAYS`（上述 `CONSOLE_*` 均有 `AISIX_CONSOLE_*` 别名可覆盖）。
+环境变量覆盖：`CONSOLE_PORT`、`CONSOLE_BIND`、`CONSOLE_RESOURCES_FILE`、`CONSOLE_AISIX_BIN`、`CONSOLE_AUTH_FILE`、`CONSOLE_RELOAD_COMMAND`、`CONSOLE_PLAYGROUND_TIMEOUT_MS`、`CONSOLE_CONFIG`、`CONSOLE_DEFAULT_PASSWORD`、`CONSOLE_METRICS_DB`、`CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS`、`CONSOLE_METRICS_RETENTION_HOURS`（上述 `CONSOLE_*` 均有 `AISIX_CONSOLE_*` 别名可覆盖）。
 
 ### 用量统计看板（/metrics）
 
-- **数据源**：网关默认开启的 Prometheus 监听（默认 `:9090` 的 `/metrics`）。控制台按 `metricsScrapeIntervalSeconds` 抓取，每个时间序列每分钟存一个点，按 `metricsRetentionDays` 滚动清理，所以网关重启后历史用量不丢。
+- **数据源**：网关默认开启的 Prometheus 监听（默认 `:9090` 的 `/metrics`）。控制台按 `metricsScrapeIntervalSeconds` 抓取，每个时间序列每分钟存一个点，按 `metricsRetentionHours` 滚动清理（默认 1 小时），所以网关重启后历史用量不丢。
 - **前提**：`gateway.metrics` 必须能访问到运行中的网关；否则看板横幅会提示「网关不可达」，KPI 全 0。
 - **指标**：请求量（按 outcome `success/client_error/upstream_error/rate_limited`）、输入/输出/总 Token、累计花费（micro-USD → USD）、请求延迟直方图（P50/P95）、在途请求数、限流拒绝数；并按 `model`、`api_key_id` 拆分明细。
 - **依赖 Node 22+**：采集器使用内置 `node:sqlite`（Node 22.5+ 可用，仅打印 ExperimentalWarning，无需原生依赖）。

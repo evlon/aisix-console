@@ -24,7 +24,10 @@ const DEFAULTS = {
   reloadCommand: '',
   metricsDb: path.join(PROJECT_ROOT, 'data', 'metrics.db'),
   metricsScrapeIntervalSeconds: 10,
-  metricsRetentionDays: 7,
+  // Default retention is 1 hour so the console never eats memory/disk on a
+  // long-running box just to keep history. Operators who want a longer window
+  // must set it explicitly (config or CONSOLE_METRICS_RETENTION_HOURS).
+  metricsRetentionHours: 1,
 };
 
 function deepMerge(base, override) {
@@ -76,8 +79,8 @@ export function loadConfig() {
   if (envMetricsDb) cfg.metricsDb = envMetricsDb;
   const envScrape = process.env.CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS || process.env.AISIX_CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS;
   if (envScrape) cfg.metricsScrapeIntervalSeconds = Number(envScrape);
-  const envRetention = process.env.CONSOLE_METRICS_RETENTION_DAYS || process.env.AISIX_CONSOLE_METRICS_RETENTION_DAYS;
-  if (envRetention) cfg.metricsRetentionDays = Number(envRetention);
+  const envRetention = process.env.CONSOLE_METRICS_RETENTION_HOURS || process.env.AISIX_CONSOLE_METRICS_RETENTION_HOURS;
+  if (envRetention) cfg.metricsRetentionHours = Number(envRetention);
 
   // Resolve relative paths against the config file's directory (or project root).
   const baseDir = fs.existsSync(configPath) ? path.dirname(configPath) : PROJECT_ROOT;

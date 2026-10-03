@@ -43,5 +43,5 @@ reloadCommand: ""
 # observability.metrics.prometheus.enabled: true（默认即开启）。
 metricsDb: "./data/metrics.db"          # SQLite 文件路径（相对路径按本配置文件目录解析）
 metricsScrapeIntervalSeconds: 10        # 抓取间隔（秒）
-metricsRetentionDays: 7                 # 历史快照保留天数（过期自动清理）
+metricsRetentionHours: 1                # 历史快照保留时长（小时，默认 1 小时；过期自动清理并回收磁盘）
 

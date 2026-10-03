@@ -406,7 +406,7 @@ export default {
     scrapeInfo: 'Scrape status',
     lastScrape: 'Last scrape',
     seriesCount: 'Series',
-    retention: 'Retention (days)',
+    retention: 'Retention (hours)',
     reachable: 'reachable',
     unreachable: 'unreachable',
     kpi: {

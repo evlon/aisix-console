@@ -407,7 +407,7 @@ export default {
     scrapeInfo: '抓取状态',
     lastScrape: '上次抓取',
     seriesCount: '系列数',
-    retention: '保留天数',
+    retention: '保留时长（小时）',
     reachable: '可达',
     unreachable: '不可达',
     kpi: {

@@ -100,6 +100,11 @@ function openDb(dbFile) {
   const dir = path.dirname(dbFile);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(dbFile);
+  // INCREMENTAL auto_vacuum lets us reclaim freed pages explicitly (below)
+  // instead of relying on a full VACUUM; without it, a long-running console
+  // would keep the db file at its historical high-water size even after rows
+  // are pruned — the exact disk blow-up seen on long-lived deployments.
+  db.exec('PRAGMA auto_vacuum = INCREMENTAL');
   db.exec(
     `CREATE TABLE IF NOT EXISTS samples (
        metric TEXT NOT NULL,
@@ -386,7 +391,7 @@ function latestInPoints(points, t, startValue) {
 export function createMetricsCollector(cfg) {
   const dbFile = cfg.metricsDb || path.join(PROJECT_ROOT, 'data', 'metrics.db');
   const intervalSec = cfg.metricsScrapeIntervalSeconds ?? 10;
-  const retentionDays = cfg.metricsRetentionDays ?? 7;
+  const retentionHours = cfg.metricsRetentionHours ?? 1;
   const metricsBase = cfg.gateway?.metrics || '';
 
   const state = {
@@ -397,7 +402,7 @@ export function createMetricsCollector(cfg) {
     lastScrapeError: null,
     seriesCount: 0,
     dbRows: 0,
-    retentionDays,
+    retentionHours,
     scrapeIntervalSeconds: intervalSec,
     metricsUrl: metricsBase ? `${metricsBase}/metrics` : null,
   };
@@ -436,9 +441,16 @@ export function createMetricsCollector(cfg) {
         insert.run(s.metric, canonicalLabels(s.labels), minute, s.value);
       }
       // prune
-      const cutoff = now - retentionDays * 86400;
+      const cutoff = now - retentionHours * 3600;
       db.prepare('DELETE FROM samples WHERE ts < ?').run(cutoff);
       db.exec('COMMIT');
+      // Reclaim freed pages so the on-disk file shrinks back after pruning
+      // instead of holding its high-water size forever (INCREMENTAL mode).
+      try {
+        db.exec('PRAGMA incremental_vacuum');
+      } catch {
+        /* ignore — file size is a nicety, correctness already committed */
+      }
       state.reachable = true;
       state.lastScrapeOk = true;
       state.lastScrapeError = null;
@@ -461,6 +473,15 @@ export function createMetricsCollector(cfg) {
   function start() {
     if (!state.enabled) {
       state.lastScrapeError = 'metrics listener 未配置（gateway.metrics 为空）';
+      // Metrics is off: reclaim any database left over from a previous
+      // run so a disabled collector never keeps disk occupied.
+      try {
+        for (const suffix of ['', '-wal', '-shm', '-journal']) {
+          fs.rmSync(dbFile + suffix, { force: true });
+        }
+      } catch {
+        /* ignore */
+      }
       return;
     }
     try {
