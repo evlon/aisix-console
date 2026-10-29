@@ -237,13 +237,38 @@ async function remove(e) {
   }
 }
 
-async function copyPlaintext() {
+// navigator.clipboard is secure-context-only too (undefined over plain HTTP on
+// an intranet), so fall back to a hidden textarea + execCommand.
+function copyViaTextarea(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
   try {
-    await navigator.clipboard.writeText(generatedPlaintext.value);
-    alert(t('apiKeys.copied'));
+    ok = document.execCommand('copy');
   } catch {
-    /* clipboard may be unavailable */
+    ok = false;
   }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+async function copyPlaintext() {
+  const text = generatedPlaintext.value;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(t('apiKeys.copied'));
+      return;
+    } catch {
+      /* fall through to the textarea path */
+    }
+  }
+  alert(copyViaTextarea(text) ? t('apiKeys.copied') : t('apiKeys.copyManually'));
 }
 
 onMounted(load);

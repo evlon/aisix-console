@@ -223,6 +223,7 @@ export default {
     revealWarning: '⚠️ 此明文只会显示这一次，关闭后无法再次查看。请立即保存。',
     copyAndClose: '复制并关闭',
     copied: '已复制。关闭后无法再次查看。',
+    copyManually: '无法自动复制，请手动选中下方密钥文本复制。',
     createFlowPrompt: '请选择创建方式',
     noPlaintext: '请粘贴要导入的密钥明文',
     noEnvVar: '请填写环境变量名',

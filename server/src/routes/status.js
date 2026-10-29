@@ -1,6 +1,7 @@
 // Gateway status proxy — aggregates config/models/health, tolerant of a down
 // gateway. Also secrets names (never values) and misc endpoints.
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 import * as secrets from '../secrets.js';
 import { loadFile, loadFileCached, fingerprint, fingerprintAsync, KINDS } from '../resources.js';
 
@@ -83,6 +84,20 @@ export function miscRouter(ctx) {
       reloadCommand: ctx.cfg.reloadCommand || null,
       gateway: ctx.cfg.gateway,
     });
+  });
+
+  // SHA-256 (lowercase hex) of a caller API key. The browser hashes keys with
+  // WebCrypto when it can, but `crypto.subtle` only exists in a secure context
+  // (HTTPS or localhost) — on a plain-HTTP intranet deployment the frontend
+  // has no way to hash, so it falls back to this endpoint. The key still never
+  // lands in resources.yaml in plaintext: only the digest is stored.
+  router.post('/util/sha256', (req, res) => {
+    const text = req.body?.text;
+    if (typeof text !== 'string' || text === '') {
+      return res.status(400).json({ error: '需要非空 text' });
+    }
+    const hash = createHash('sha256').update(text, 'utf8').digest('hex');
+    res.json({ hash });
   });
 
   // Full-file raw YAML, for the raw editor page.

@@ -222,6 +222,7 @@ export default {
     revealWarning: '⚠️ This plaintext is shown only once and cannot be viewed again. Save it now.',
     copyAndClose: 'Copy & close',
     copied: 'Copied. Cannot be viewed again.',
+    copyManually: 'Copy failed automatically — select the key text below and copy it manually.',
     createFlowPrompt: 'Choose a creation method',
     noPlaintext: 'Paste the plaintext API key to import',
     noEnvVar: 'Enter the environment variable name',
