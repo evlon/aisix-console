@@ -20,7 +20,7 @@ Node.js（Express）后端 + Vue 3 / Vite 前端（vue-i18n 双语），npm work
 
 ## 部署（单容器，推荐）
 
-**网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 编译网关，双轨：稳定轨从 `api7/aisix` **最新 release**（构建时经 GitHub API 获取，验证门禁挡住 schema 漂移）编译、edge 轨从 `api7/aisix` main 编译；镜像带 `aisix.version` 标签，见 `.github/workflows/build-image.yml`）。**每日定时构建会重新拉取 aisix 最新 release 并刷新 `:latest`（同时打 `:aisix-X.Y.Z` 标签）** —— aisix 发版后约一天内 `docker pull` 即可拿到新网关；想要最新 main 特性用 `:edge`（在 Actions 页手动 `workflow_dispatch` 触发）。一个容器同时跑两个进程，保存配置后**自动热重载网关**。详见 **[deploy/README.md](deploy/README.md)**。
+**网关 + 控制台打成一个镜像** `ghcr.io/evlon/aisix-console`（CI 编译网关，双轨：稳定轨从 `api7/aisix` **最新 release**（构建时经 GitHub API 获取，验证门禁挡住 schema 漂移）编译、edge 轨从 `api7/aisix` main 编译；镜像带 `aisix.version` 标签，见 `.github/workflows/build-image.yml`）。**每日定时构建会重新拉取 aisix 最新 release 并刷新 `:latest`（同时打 `:aisix-X.Y.Z` 标签）** —— aisix 发版后约一天内 `docker pull` 即可拿到新网关；想要最新 main 特性用 `:edge`（在 Actions 页手动 `workflow_dispatch` 触发）。一个容器同时跑两个进程，保存配置后**自动热重载网关**。详见 **[deploy/README.zh-CN.md](deploy/README.zh-CN.md)**（英文版 [deploy/README.md](deploy/README.md)）。
 
 ```bash
 # 全新服务器一键安装：
@@ -92,7 +92,7 @@ npm start
 | `metricsDb` | 用量数据点 SQLite 落盘路径（默认 `data/metrics.db`） |
 | `metricsScrapeIntervalSeconds` | 抓取网关 `/metrics` 间隔（默认 10 秒） |
 | `metricsRetentionHours` | 用量数据保留时长（小时），到期自动清理并回收磁盘（默认 1 小时，主动设置才更长） |
-| `reloadCommand` | 保存后重载命令；单容器部署用 `kill -HUP $(cat /run/aisix.pid)`；留空则提示手动重载 |
+| `reloadCommand` | 保存后重载命令；单容器部署用 `sh /usr/local/bin/gw-hup.sh`（扫本容器 `/proc` 找 `aisix` 进程发 SIGHUP，**无 pidfile**）；网关独立容器时改成 `docker kill -s HUP aisix`；留空则提示手动重载 |
 
 环境变量覆盖：`CONSOLE_PORT`、`CONSOLE_BIND`、`CONSOLE_RESOURCES_FILE`、`CONSOLE_AISIX_BIN`、`CONSOLE_AUTH_FILE`、`CONSOLE_RELOAD_COMMAND`、`CONSOLE_PLAYGROUND_TIMEOUT_MS`、`CONSOLE_CONFIG`、`CONSOLE_DEFAULT_PASSWORD`、`CONSOLE_METRICS_DB`、`CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS`、`CONSOLE_METRICS_RETENTION_HOURS`（上述 `CONSOLE_*` 均有 `AISIX_CONSOLE_*` 别名可覆盖）。
 
@@ -189,7 +189,7 @@ token 数就在导出的事件里，所以外部仓库可以直接做长期统�
 
 保存配置后，`aisix validate` 通过即写文件并执行 `reloadCommand`：
 
-- **单容器（推荐）**：`kill -HUP $(cat /run/aisix.pid)` —— 已内置在 `deploy/aisix-console.yaml`，保存即自动生效
+- **单容器（推荐）**：`sh /usr/local/bin/gw-hup.sh` —— 已内置在 `deploy/aisix-console.yaml`，保存即自动生效。它**扫描本容器的 `/proc`** 找名为 `aisix` 的进程发 SIGHUP（没有 pidfile，所以不会出现 pidfile 过期）；网关跑在**独立容器**里时它找不到目标，需要换成下面的形式
 - Docker（网关独立容器）：`docker kill -s HUP aisix`
 - systemd：`systemctl reload aisix`
 - Linux 原生：`kill -HUP <pid>`

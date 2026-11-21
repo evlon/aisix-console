@@ -11,7 +11,8 @@
 # ).
 #
 # Both processes run under docker/entrypoint.sh, so the console hot-reloads the
-# gateway with `kill -HUP $(cat /run/aisix.pid)` — same PID namespace.
+# gateway by SIGHUP via docker/gw-hup.sh — which finds the gateway by scanning
+# this container's /proc for a process named `aisix` (no pidfile to go stale).
 
 # --- Build the Vue frontend ---------------------------------------------
 FROM node:22-trixie-slim AS web-build

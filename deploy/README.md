@@ -1,5 +1,7 @@
 # Deploy — single container (gateway + console)
 
+中文版：[README.zh-CN.md](README.zh-CN.md)
+
 One image (`ghcr.io/evlon/aisix-console`) runs both the AISIX gateway and the
 web console under a small supervisor (`docker/entrypoint.sh`). Because they
 share one PID namespace, saving a config change in the console **hot-reloads
@@ -11,14 +13,20 @@ for new provider keys (they are written as plaintext into `resources.yaml`).
 The gateway binary is built by CI with a **two-track** strategy (see
 `.github/workflows/build-image.yml`):
 
-- **stable** — built from `api7/aisix` at a pinned commit (the console's
-  known-good gateway; it includes `claim_mappings`, which the latest
-  `api7/aisix` release `v0.8.2` does **not** yet — so a release tag can't be
-  used for stable until `api7/aisix` ships a release that includes it). The
-  `evlon/aisix` fork is retired; this commit is an `api7/aisix` commit.
-  Published as `:latest` (and `:v*` on tag pushes).
+- **stable** — tracks the **newest `api7/aisix` release**: the build fetches
+  `releases/latest` via the GitHub API, and falls back to
+  `AISIX_STABLE_FALLBACK` (currently `v0.9.0`) when that call fails or is
+  rate-limited. Published as `:latest` (and `:v*` on tag pushes).
 - **edge** — built from `api7/aisix` `main` (newest features), published as
   `:edge`. Refreshed nightly and on `workflow_dispatch` (`track=edge`).
+
+> ⚠️ **The stable track follows releases, so it moves on its own.** Upstream's
+> release workflow creates **drafts** (`gh release create … --draft`), and
+> `releases/latest` ignores drafts — so a build can pick up an older gateway than
+> you expect. Measured 2026-11: `:latest` resolved to `aisix-1.10.0` because
+> `v1.11.0`'s release was still a draft. That matters hard for a
+> `_format_version: "2"` file, which **only a gateway ≥ 1.11 can read**. To pin,
+> use a concrete tag (`aisix-1.11.0`), not `:latest`.
 
 Every image carries an `aisix.version` OCI label recording the gateway build
 (`docker inspect --format '{{.Config.Labels}}' <image>`). For a local build,
@@ -90,8 +98,10 @@ docker compose -f deploy/docker-compose.yml up -d
 
 ## Hot reload & updates
 
-- **Save any change in the console → gateway reloads automatically**
-  (`kill -HUP $(cat /run/aisix.pid)`, same container). Nothing else to run.
+- **Save any change in the console → gateway reloads automatically.** The
+  console runs `sh /usr/local/bin/gw-hup.sh`, which **scans this container's
+  `/proc`** for a process named `aisix` and sends it SIGHUP — there is **no
+  pidfile** to go stale. Nothing else to run.
 - **New provider keys** are written as plaintext into `resources.yaml` → they
   also apply on the next hot reload. No env wiring, no recreate.
 - **Update**: `docker pull ghcr.io/evlon/aisix-console:latest` then recreate
@@ -316,6 +326,8 @@ commit → `:latest` / `:v*`) or edge (`api7/aisix` main → `:edge`):
 - nightly / `track=edge` → `edge`
 - manual run with `aisix_ref` → `aisix-<version>`
 
-Logs: the supervisor writes the gateway to `/var/log/aisix-gateway.log` inside
-the container; `docker logs aisix` shows the console plus `[entrypoint]`
-messages.
+Logs: the gateway and the console both write to stdout — use `docker logs aisix`
+(lines prefixed `[entrypoint]` come from the supervisor). An earlier design
+appended the gateway to `/var/log/aisix-gateway.log` inside the container's
+writable layer with no rotation, which could fill it and leave the console unable
+to start even after a restart; stdout lets the docker log driver rotate instead.
