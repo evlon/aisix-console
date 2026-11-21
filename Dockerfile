@@ -14,7 +14,7 @@
 # gateway with `kill -HUP $(cat /run/aisix.pid)` — same PID namespace.
 
 # --- Build the Vue frontend ---------------------------------------------
-FROM node:22-bookworm-slim AS web-build
+FROM node:22-trixie-slim AS web-build
 WORKDIR /build
 COPY package.json package-lock.json ./
 COPY server/package.json ./server/
@@ -24,9 +24,15 @@ COPY web/ ./web/
 RUN npm run build -w web
 
 # --- Runtime -------------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+# Debian 13 (trixie) — NOT bookworm. The gateway binary is compiled by CI on a
+# modern runner and links against a newer glibc than bookworm ships: aisix
+# 1.11.0 requires GLIBC_2.38/2.39 while bookworm has 2.36, so the gateway
+# refuses to start ("version `GLIBC_2.39' not found"). The upstream
+# ghcr.io/api7/aisix:1.11.0 image is itself Debian 13 (glibc 2.41), which is
+# the floor this image has to meet.
+FROM node:22-trixie-slim AS runtime
 ARG AISIX_VERSION
-LABEL org.opencontainers.image.base="node:22-bookworm-slim"
+LABEL org.opencontainers.image.base="node:22-trixie-slim"
 LABEL org.opencontainers.image.source="https://github.com/evlon/aisix-console"
 LABEL org.opencontainers.image.description="AISIX AI Gateway + web console (single container)"
 LABEL aisix.version="${AISIX_VERSION}"
