@@ -113,3 +113,36 @@ test('latestGaugesByLabel honours a label filter', () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].value, 9);
 });
+
+// aisix_llm_tokens_by_client_total carries input / output / total as three
+// SEPARATE series over the same tokens. Reading them together is the easiest
+// way to triple a number in this file, so the filter is pinned here.
+test('the by-client token breakdown counts each token_type exactly once', () => {
+  const { db } = tmpDb();
+  const C = 'aisix_llm_tokens_by_client_total';
+  // One client, one model: input 100, output 40, total 140 (total INCLUDES both).
+  series(db, C, { client_type: 'cursor', model: 'm', token_type: 'input' }, [[100, 100], [160, 300]]);
+  series(db, C, { client_type: 'cursor', model: 'm', token_type: 'output' }, [[100, 40], [160, 90]]);
+  series(db, C, { client_type: 'cursor', model: 'm', token_type: 'total' }, [[100, 140], [160, 390]]);
+
+  const total = counterBreakdown(db, C, 'client_type', 100, 160, { token_type: 'total' });
+  const input = counterBreakdown(db, C, 'client_type', 100, 160, { token_type: 'input' });
+  const output = counterBreakdown(db, C, 'client_type', 100, 160, { token_type: 'output' });
+
+  assert.deepEqual(total, [{ key: 'cursor', value: 250 }]);
+  assert.deepEqual(input, [{ key: 'cursor', value: 200 }]);
+  assert.deepEqual(output, [{ key: 'cursor', value: 50 }]);
+  // The hazard: summing all three series would read 500 for 250 tokens.
+  const unfiltered = counterBreakdown(db, C, 'client_type', 100, 160);
+  assert.equal(unfiltered[0].value, 500);
+  assert.notEqual(total[0].value, unfiltered[0].value);
+});
+
+test('a second client is reported separately, not merged', () => {
+  const { db } = tmpDb();
+  const C = 'aisix_llm_tokens_by_client_total';
+  series(db, C, { client_type: 'cursor', model: 'm', token_type: 'total' }, [[100, 10], [160, 60]]);
+  series(db, C, { client_type: 'claude-cli', model: 'm', token_type: 'total' }, [[100, 5], [160, 25]]);
+  const rows = counterBreakdown(db, C, 'client_type', 100, 160, { token_type: 'total' });
+  assert.deepEqual(rows, [{ key: 'cursor', value: 50 }, { key: 'claude-cli', value: 20 }]);
+});
