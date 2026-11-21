@@ -204,6 +204,31 @@ WARN aisix: <NAME> was not applied as a configuration override: it names no
 
 That last clause is the answer: interpolation is a resources-file feature only.
 
+### A placeholder and a real value look identical
+
+There is a second half to this failure that only shows up over time: a literal
+`"${SOME_VAR}"` in a config file is **not distinguishable from a working value**,
+so the mistake survives review and then behaves like a weak key. The same shape
+bites when two copies of a config drift — a repo copy holding the placeholder and
+a server copy holding the real value look equivalent in a diff, and re-uploading
+the repo copy silently downgrades a real key to a guessable literal. Nothing
+errors; authentication just starts accepting the wrong string.
+
+Two habits that close it:
+
+- Keep the file **byte-identical between repository and server**, and put the
+  secret in the environment (or a `chmod 600` file the repository does not
+  track). Then "which copy is deployed" stops mattering.
+- Prefer a form that **fails loudly** when the value is absent. The gateway
+  refuses to start with an empty `admin_keys` (it is a required field when
+  `managed.enabled` is false), so moving the key out of the file turns a silent
+  fallback into a startup error.
+
+`deploy/config.yaml` ships a **known** `admin-local-test`: it is public, and the
+admin listener is bound to `0.0.0.0:3002` and published on the host. Change it —
+and change `adminKey` in `aisix-console.yaml` to match, or the console loses its
+`/admin/v1/health` readout.
+
 ### The env override that does work, and its two traps
 
 For a normal field the loader layers `AISIX_<SECTION>__<KEY>` on top of the

@@ -8,6 +8,14 @@ proxy:
 admin:
   enabled: true
   addr: "0.0.0.0:3002"
+  # CHANGE THIS. The value below ships in the repository, so it is public — and
+  # this listener is bound to 0.0.0.0 and published on the host. Anyone who can
+  # reach :3002 with the shipped key gets the read-only admin surface (model
+  # health, resource listings). It is also the value the console's
+  # aisix-console.yaml `adminKey` must match; change both together.
+  #
+  # Do NOT write "${SOME_VAR}" here: config.yaml does not interpolate, so that
+  # is a 20-character literal, not a lookup (see deploy/README.md).
   admin_keys:
     - "admin-local-test"
 
