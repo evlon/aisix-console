@@ -100,6 +100,76 @@ docker compose -f deploy/docker-compose.yml up -d
 - Advanced `key_env` / `${VAR}` references still need the variable present in
   the gateway environment (pass `-e` or an `--env-file` to `docker run`).
 
+## Base image and the gateway's glibc floor
+
+The image runs both processes, so its base distribution must be able to execute
+the gateway binary. That binary is compiled by CI on a modern runner and links
+against a newer glibc than Debian 12 ships:
+
+| | glibc |
+|---|---|
+| `node:22-bookworm-slim` (Debian 12) | 2.36 |
+| **aisix 1.11.0** requires | up to **GLIBC_2.39** |
+| `node:22-trixie-slim` (Debian 13) | 2.41 |
+| upstream `ghcr.io/api7/aisix:1.11.0` image | 2.41 (Debian 13) |
+
+With bookworm the gateway refuses to start:
+
+```
+aisix: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found (required by aisix)
+```
+
+which leaves the console up and the gateway in the entrypoint's restart loop —
+the container still reports `healthy`, because the healthcheck probes the
+console. Hence the image is built `FROM node:22-trixie-slim` (Debian 13). If you
+bump the gateway past a release that raises the glibc floor again, check
+`ldd --version` in the target base before blaming the config.
+
+## resources.yaml format
+
+aisix ≥ 1.11 requires `_format_version: "2"` and a UUID `id` on every row; see
+the main README's 「resources.yaml 的文件格式」 section. Migrate **before**
+pointing a v1 file at a 1.11+ gateway — a mismatch fails the whole load, not one
+row. The console shows a banner with a one-click migration, and
+`node server/scripts/migrate-resources-v2.mjs` does the same thing offline.
+
+## Observability exporter credentials
+
+This compose file does **not** declare an `env_file`, and the data dir's
+`secrets.env` is only injected into the console's `aisix validate` subprocess —
+it never reaches the gateway. So an observability exporter's `credential_ref`
+has no wiring path out of the box: the variable must be added to the gateway
+process explicitly.
+
+The console's exporter page derives the exact variable names from the reference
+you type and shows which ones are already present, plus a paste-ready snippet.
+In short, for a reference named `foo`:
+
+| kind | variables the gateway reads |
+|---|---|
+| `aliyun_sls` | `SLS_CRED_FOO_AK_ID`, `SLS_CRED_FOO_AK_SECRET` |
+| `datadog` | `DD_CRED_FOO_API_KEY` |
+| `object_store` (s3) | `OBJSTORE_CRED_FOO_AWS_ACCESS_KEY_ID`, `OBJSTORE_CRED_FOO_AWS_SECRET_ACCESS_KEY` (+ optional `..._AWS_SESSION_TOKEN`) |
+| `object_store` (gcs) | `OBJSTORE_CRED_FOO_GCS_SERVICE_ACCOUNT_KEY` |
+| `object_store` (azure_blob) | `OBJSTORE_CRED_FOO_AZURE_ACCOUNT`, `OBJSTORE_CRED_FOO_AZURE_ACCESS_KEY` |
+
+`FOO` is the reference upper-cased with each non-alphanumeric character folded
+to `_`. Do **not** rename these prefixes to `AISIX_*`: the gateway treats that
+namespace as config overrides and `docker/entrypoint.sh` strips it.
+
+Add them to `services.aisix` in `docker-compose.yml`:
+
+```yaml
+services:
+  aisix:
+    environment:
+      - SLS_CRED_FOO_AK_ID=…
+      - SLS_CRED_FOO_AK_SECRET=…
+```
+
+then recreate the container (`docker compose up -d`) — an env change needs a
+recreate, not a hot reload.
+
 ## Building the image in CI
 
 `.github/workflows/build-image.yml` builds `aisix` (two-track; see above) and

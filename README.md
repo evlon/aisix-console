@@ -104,12 +104,86 @@ npm start
 - **依赖 Node 22+**：采集器使用内置 `node:sqlite`（Node 22.5+ 可用，仅打印 ExperimentalWarning，无需原生依赖）。
 - 数据仅本地落盘，不上报任何外部服务。
 
+## resources.yaml 的文件格式（v1 / v2）
+
+网关对 `resources.yaml` 的格式有一个**硬校验**，两个版本互不兼容（文件对不上就**整个加载失败**，不是某一条被拒）：
+
+| | v1（「糖语法」） | v2（etcd 文档） |
+|---|---|---|
+| 版本字段 | `_format_version: "1"` | `_format_version: "2"` |
+| 条目标识 | 无 `id`，靠 `display_name`/`name` 做身份 | **每条必须带小写带连字符的 UUID `id`** |
+| 引用写法 | 名字，如 `provider_key: deepseek` | id，如 `provider_key_id: 07e1ef9f-…` |
+| 适用网关 | aisix **≤ 1.10** | aisix **≥ 1.11** |
+
+改动来自上游 `#1449`（`feat(file-source)!`，2026-11-18，v1.11.0）：它把 `_format_version` 变成硬等价判断，并**删除了整个 desugar 层**（`desugar.rs` / `derive_id`），也就是名字→id 的糖语法。所以 v1 文件在 1.11+ 上会让网关起不来，v2 文件在 1.10 及以前同样不行。
+
+### 迁移
+
+两种方式，任选其一：
+
+- **控制台**：文件是 v1 时，页面顶部会出现横幅，点「迁移到 format 2」即可。
+- **命令行**：`node server/scripts/migrate-resources-v2.mjs [--in-place] resources.yaml [out.yaml]`（幂等）。
+
+**迁移是保 id 的**：每条资源的 `id` 用 `uuid5(命名空间, "<kind>/<身份>")` 派生 —— 与旧版网关自己算出来的**完全同一批 id**（控制台里 `deriveId` 已逐字节对齐）。所以升级不会让 `provider_key_id` / `api_key_id` 变新，指标、访问日志、预算记录继续指向同一个资源。
+
+**迁移是自保护的**：它走正常保存管线，会先用配置的 `aisix validate` 校验。若当前网关二进制早于 1.11，它会以 `unrecognized _format_version "2"` 拒绝，**文件不会被改动**。所以误点不会把网关搞挂。
+
+> 保存时控制台会保留文件已经声明的版本、并沿用既有 `id`（不会因为某次编辑就把资源换成新 id）。切换格式只能靠上面的显式迁移。
+
 ## 密钥接线
 
 - **推荐（单容器）**：Provider Key 的 `api_key` **明文直写** resources.yaml，保存后自动热重载生效，无需任何环境变量注入，也无需重建容器
 - **引用已有环境变量**（高级）：写 `${VAR}` 到 resources.yaml，需自行把变量注入网关进程环境（`docker run -e` / `--env-file` / systemd `EnvironmentFile`）
 - ⚠️ 环境变量名不能以 `AISIX_` 开头：aisix 网关会把所有 `AISIX_*` 环境变量当作配置覆盖（`unknown field ...` 直接启动失败）。若用引用模式，请用 `CONSOLE_*` 等非 `AISIX_` 前缀
 - 调用方密钥（caller key）仍只存 SHA-256 哈希，明文仅创建时显示一次
+
+## 观测导出器（observability_exporters）
+
+「资源集成 → 可观测性导出器」把网关的**逐请求遥测扇出到外部后端**（数据面直连，控制台不经手数据）：OTLP/HTTP（Grafana Cloud / Tempo / Jaeger / Langfuse / Honeycomb 等）、Datadog、阿里云 SLS、对象存储归档（S3 / GCS / Azure Blob）。长期、跨实例的统计交给外部仓库；控制台本地 SQLite 只负责即时、零依赖的视图。
+
+**导出的形态是 traces 和 logs，不是 metrics** —— 网关没有 Prometheus remote-write，也没有 OTLP `/v1/metrics`。所以：
+
+| 目标 | 能否直连 | 说明 |
+|---|---|---|
+| Datadog | ✅ | `kind: datadog`，原生日志入口 |
+| 阿里云 SLS | ✅ | `kind: aliyun_sls`，PutLogs |
+| Grafana（经 Tempo） | ✅ 间接 | `kind: otlp_http` → Tempo，token 在 span 属性里（`gen_ai.usage.input_tokens` / `output_tokens`） |
+| Graphite 等纯指标库 | ❌ | 需要中间转换（OTel Collector / Grafana Alloy 从 traces 生成指标，或聚合日志） |
+
+token 数就在导出的事件里，所以外部仓库可以直接做长期统计。
+
+### `credential_ref` 不是密钥，是引用名
+
+这是这一页最容易踩的坑：`credential_ref` 填的是**引用名**，网关投递时用它去**自己的进程环境变量**里取真正的密钥。页面会把引用名换算成需要设置的变量名，并显示当前是否已设置。
+
+| kind | 引用名 `foo` → 网关需要的环境变量 |
+|---|---|
+| `aliyun_sls` | `SLS_CRED_FOO_AK_ID`、`SLS_CRED_FOO_AK_SECRET` |
+| `datadog` | `DD_CRED_FOO_API_KEY` |
+| `object_store`（s3） | `OBJSTORE_CRED_FOO_AWS_ACCESS_KEY_ID`、`OBJSTORE_CRED_FOO_AWS_SECRET_ACCESS_KEY`（可选 `OBJSTORE_CRED_FOO_AWS_SESSION_TOKEN`） |
+| `object_store`（gcs） | `OBJSTORE_CRED_FOO_GCS_SERVICE_ACCOUNT_KEY` |
+| `object_store`（azure_blob） | `OBJSTORE_CRED_FOO_AZURE_ACCOUNT`、`OBJSTORE_CRED_FOO_AZURE_ACCESS_KEY` |
+
+`FOO` = 引用名转大写、**逐字符**把非字母数字替换成 `_`（不折叠连续下划线、不裁剪首尾；所以 `a__b` → `A__B`、`-x-` → `_X_`）。
+
+三个必须知道的点：
+
+- **别把密钥本身填进 `credential_ref`** —— 它会被当成引用名，永远解析不出来。这是最常见的误用。
+- 这三个前缀**刻意不以 `AISIX_` 开头**：网关把所有 `AISIX_*` 当配置覆盖，`docker/entrypoint.sh` 启动网关前也会清掉它们。所以别改名。
+- **默认部署下这些变量还没有注入路径**：`deploy/docker-compose.yml` 没有 `env_file`，`secrets.env` 只注入 `aisix validate` 子进程、不进网关进程。需要自己给 compose 的 `services.aisix` 加 `environment:`，或用 `docker run -e`/`--env-file`。界面里「查看注入方式」会给出可复制的片段。
+- 页面上「是否已设置」读的是**控制台进程**的环境变量。单容器部署下控制台与网关共享容器环境，结论一致；分离部署时请以网关进程为准。
+
+### 导出内容与隐私
+
+`content_mode` 默认 `metadata_only`：只导出 token 数、模型、状态、耗时，**不含提示词与回复全文**。Token 统计不需要内容，保持默认。改成 `full` 才会把内容送去第三方（单字段按 `content_max_bytes` 截断，默认 128 KiB）。
+
+> `otlp_http` 没有 `credential_ref`，鉴权走 `headers` —— 而 `headers` 是**明文**存在 resources.yaml 里的，注意别把它提交到公开仓库。
+
+### 投递健康
+
+导出器页顶部的「投递健康」回答「配完了吗、还在送吗」，数据来自 `aisix_usage_events_emitted_total` 与 `aisix_usage_event_drops_total`。
+
+⚠️ **口径限制**：当前网关（0.8.x）只暴露**网关级**的发送/丢弃计数，**没有按导出器归因**的指标。新版 aisix 的 `aisix_otlp_fanout_drops_total{exporter,reason}` / `aisix_otlp_fanout_failures_total{exporter}` 会被自动探测，探测到才显示单个导出器的数字；探测不到就只给整体数字并说明原因，不会假装每个导出器都健康。
 
 ## 重载
 
@@ -132,16 +206,27 @@ server/          Node.js 后端（Express）
   src/validate.js      aisix validate 封装 + 错误解析
   src/savePipeline.js  保存管线：序列化→临时文件→校验→原子替换→reload
   src/metrics.js       Prometheus 抓取 + 解析 + SQLite 落盘 + 聚合
-  src/routes/          auth / resources / status / secrets / playground / metrics
+  src/exporterCreds.js 观测导出器 credential_ref → 网关环境变量推导（只回名字，不回值）
+  src/routes/          auth / resources / status / secrets / playground / metrics / exporters
 web/             Vue 3 前端
   src/i18n/           中英语言包（zh-CN / en）
   src/stores/         status（网关轮询）+ auth（登录态）
-  src/views/          Login · Settings · Dashboard · ProviderKeys · Models · ApiKeys · Policies · Playground · Secrets · RawYaml · Metrics
-  src/components/     Chart（ECharts 封装）等
-  src/lib/            keygen + sha256（浏览器端生成/哈希调用方密钥）
+  src/views/          Login · Settings · Dashboard · ProviderKeys · Models · ApiKeys · Policies · Playground · Secrets · RawYaml · Metrics · Resources
+  src/components/     Chart（ECharts 封装）· ExporterForm（导出器向导）· ExporterHealth（投递健康）· Modal 等
+  src/lib/            keygen + sha256（浏览器端生成/哈希调用方密钥）· exporterTargets（导出器目标目录与校验）
 deploy/          单容器部署：Dockerfile、entrypoint、run.sh、compose、config/resources 模板、README
 docker/          supervisor 入口（同时拉起网关 + 控制台）
 ```
+
+## 测试
+
+```bash
+npm test            # 两个 workspace 都跑（node --test，无额外依赖）
+npm test -w server  # credential_ref → 环境变量推导
+npm test -w web     # 导出器目标目录 / 校验 / 线格式映射 / i18n 键完整性
+```
+
+导出器的 `credential_ref` 名字换算、各类 `kind` 的字段映射、以及网关 schema 正则的前端镜像都有单测 —— 这些是最容易和网关悄悄漂移的地方。i18n 测试会在漏翻译键时报错，避免界面上直接显示 `obs.xxx`。
 
 ## 注意
 
