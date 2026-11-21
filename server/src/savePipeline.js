@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exec } from 'node:child_process';
-import { serialize, fingerprint } from './resources.js';
+import { serialize, fingerprint, loadFile, reconcileIds } from './resources.js';
 import { runValidate, parseErrors } from './validate.js';
 import * as secrets from './secrets.js';
 
@@ -44,7 +44,23 @@ function runReload(command) {
 // Options: {resourcesFile, aisixBin, reloadCommand}
 export function createSaver(opts) {
   async function save(doc) {
-    const text = serialize(doc);
+    // Keep each row's resource id across the edit.
+    //
+    // Every per-kind form rebuilds its entry field by field, so `id` does not
+    // survive the round-trip. On a format-v2 file that would re-key the
+    // resource on the next save (deriving a fresh uuid), and a rename would
+    // silently orphan everything keyed by the old id — budget rows, metric
+    // series, access-log history. Reconciling against the file we are about to
+    // replace is the one place all writers pass through. A missing or
+    // unreadable previous file simply means there is nothing to carry over.
+    let candidate = doc;
+    try {
+      const prev = loadFile(opts.resourcesFile);
+      if (prev.ok) candidate = reconcileIds(prev.doc, doc);
+    } catch {
+      /* fall through with the doc as given */
+    }
+    const text = serialize(candidate);
     if (!opts.aisixBin) {
       return {
         ok: false,

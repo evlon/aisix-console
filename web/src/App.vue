@@ -6,6 +6,7 @@ import { useStatusStore } from './stores/status.js';
 import { useAuthStore } from './stores/auth.js';
 import Login from './views/Login.vue';
 import Toast from './components/Toast.vue';
+import FormatBanner from './components/FormatBanner.vue';
 
 const router = useRouter();
 const status = useStatusStore();
@@ -104,6 +105,7 @@ onUnmounted(() => status.stopPolling());
 
     <main style="flex: 1; padding: 20px 28px; overflow: auto">
       <h1 style="margin-top: 0; font-size: 20px">{{ t(router.currentRoute.value.meta.titleKey || 'app.title') }}</h1>
+      <FormatBanner />
       <router-view />
     </main>
 

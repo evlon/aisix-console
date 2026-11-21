@@ -14,6 +14,12 @@ import {
   identityOf,
   fingerprint,
   deriveId,
+  formatVersionOf,
+  migrateToV2,
+  externalizeRefs,
+  internalizeRefs,
+  unresolvedReference,
+  FORMAT_VERSION_V2,
 } from '../resources.js';
 import * as secrets from '../secrets.js';
 
@@ -28,6 +34,17 @@ export function resourcesRouter(ctx) {
       return { error: { ok: false, text: r.text, error: '文件不是有效的 resources.yaml 文档（缺少资源集合）' } };
     }
     return { doc: normalizeDoc(r.doc) };
+  };
+
+  // Turn a view-shaped entry into the wire shape the file's format version
+  // needs, and reject a named reference that does not exist. On a v2 file there
+  // is no name sugar to fall back on, so an unresolved name would otherwise
+  // surface only as a bare "unknown field" from the schema.
+  const prepareEntry = (kind, doc, raw) => {
+    const version = formatVersionOf(doc);
+    const bad = unresolvedReference(kind, raw, doc, version);
+    if (bad) return { error: bad };
+    return { entry: internalizeRefs(kind, raw, doc, version) };
   };
 
   router.get('/raw', (_req, res) => {
@@ -79,6 +96,43 @@ export function resourcesRouter(ctx) {
   });
 
   // GET/POST /api/resources/:kind ; GET/PUT/DELETE /api/resources/:kind/:identity
+  // File-format metadata. Must be registered before `/:kind`, or Express would
+  // treat "meta" as a resource kind.
+  router.get('/meta', (_req, res) => {
+    const r = loadFile(ctx.cfg.resourcesFile);
+    if (!r.ok) return res.json({ ok: false, exists: r.exists, error: r.error || null });
+    res.json({
+      ok: true,
+      exists: true,
+      formatVersion: formatVersionOf(r.doc),
+      fingerprint: fingerprint(ctx.cfg.resourcesFile),
+      eligible: true,
+    });
+  });
+
+  // Migrate the file from format v1 to v2 (the format aisix >= 1.11 requires).
+  //
+  // Self-guarding: the save runs `aisix validate` with the configured binary,
+  // so a gateway older than 1.11 rejects the migrated document ("unrecognized
+  // _format_version \"2\"") and NOTHING is written. The action cannot push a
+  // file the gateway in front of it cannot read.
+  router.post('/migrate-format-v2', async (_req, res) => {
+    const cur = currentDoc();
+    if (cur.error) return res.status(409).json(cur.error);
+    if (formatVersionOf(cur.doc) === FORMAT_VERSION_V2) {
+      return res.json({ ok: true, alreadyV2: true });
+    }
+    const result = await saver.save(migrateToV2(cur.doc));
+    res.status(result.ok ? 200 : 409).json({
+      ...result,
+      migrated: result.ok,
+      // A mismatch here means the gateway binary is older than 1.11.
+      hint: result.ok
+        ? null
+        : '迁移被 aisix validate 拒绝。若错误是 unrecognized _format_version "2"，说明当前网关二进制早于 1.11，请先升级网关。',
+    });
+  });
+
   router.get('/:kind', (req, res) => {
     const { kind } = req.params;
     if (!(kind in IDENTITY_FIELD)) {
@@ -86,7 +140,13 @@ export function resourcesRouter(ctx) {
     }
     const { doc, error } = currentDoc();
     if (error) return res.status(409).json(error);
-    res.json({ entries: doc[kind] ?? [], fingerprint: fingerprint(ctx.cfg.resourcesFile) });
+    res.json({
+      // Present id references under their v1 name so a v2 file does not turn
+      // the provider-key picker into a uuid box.
+      entries: (doc[kind] ?? []).map((e) => externalizeRefs(kind, e, doc)),
+      formatVersion: formatVersionOf(doc),
+      fingerprint: fingerprint(ctx.cfg.resourcesFile),
+    });
   });
 
   // Derived-id map for a kind: [{identity, id}] where id = uuid5("<kind>/<identity>").
@@ -118,10 +178,15 @@ export function resourcesRouter(ctx) {
     const { doc, error } = currentDoc();
     if (error) return res.status(409).json(error);
 
-    const entry = req.body?.entry ?? req.body;
-    if (!entry || typeof entry !== 'object') {
+    const raw = req.body?.entry ?? req.body;
+    if (!raw || typeof raw !== 'object') {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: '请求体需包含资源对象' }] });
     }
+    const prepared = prepareEntry(kind, doc, raw);
+    if (prepared.error) {
+      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: prepared.error }] });
+    }
+    const entry = prepared.entry;
     const identity = identityOf(kind, entry);
     if (!identity) {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${identityFieldOf(kind) || 'identity'}` }] });
@@ -142,7 +207,7 @@ export function resourcesRouter(ctx) {
     if (error) return res.status(409).json(error);
     const idx = findIndex(doc[kind], kind, identity);
     if (idx < 0) return res.status(404).json({ error: '未找到' });
-    res.json({ entry: doc[kind][idx] });
+    res.json({ entry: externalizeRefs(kind, doc[kind][idx], doc) });
   });
 
   router.put('/:kind/:identity', async (req, res) => {
@@ -150,10 +215,15 @@ export function resourcesRouter(ctx) {
     const { doc, error } = currentDoc();
     if (error) return res.status(409).json(error);
 
-    const entry = req.body?.entry ?? req.body;
-    if (!entry || typeof entry !== 'object') {
+    const raw = req.body?.entry ?? req.body;
+    if (!raw || typeof raw !== 'object') {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: '请求体需包含资源对象' }] });
     }
+    const prepared = prepareEntry(kind, doc, raw);
+    if (prepared.error) {
+      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: prepared.error }] });
+    }
+    const entry = prepared.entry;
     const newIdentity = identityOf(kind, entry);
     if (!newIdentity) {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${identityFieldOf(kind) || 'identity'}` }] });

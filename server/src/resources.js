@@ -281,3 +281,239 @@ export function uuid5(namespaceBytes, name) {
 export function deriveId(kind, identity) {
   return uuid5(FILE_RESOURCE_NAMESPACE_BYTES, `${kind}/${identity}`);
 }
+
+// ── File format versions ─────────────────────────────────────────────────
+// v1 ("sugar"): rows carry no id, references are names. aisix <= 1.10.
+// v2 (etcd-document): every row carries the resource's UUID as `id`, and
+//   references are ids. MANDATORY from aisix 1.11 — commit `#1449`
+//   ("feat(file-source)!") made `_format_version` a hard equality check and
+//   deleted the name→id sugar layer (`desugar.rs`, `derive_id`).
+//
+// The two formats are mutually exclusive on the gateway side: a v1 file on an
+// aisix >= 1.11 fails the whole load ("unrecognized _format_version \"1\"
+// (supported: \"2\")"), and a v2 file on aisix <= 1.10 fails the same check in
+// the other direction. So the console PRESERVES whatever the file declares and
+// only switches format through an explicit, operator-initiated migration.
+export const FORMAT_VERSION_V1 = '1';
+export const FORMAT_VERSION_V2 = '2';
+
+export function formatVersionOf(doc) {
+  return doc?._format_version === FORMAT_VERSION_V2 ? FORMAT_VERSION_V2 : FORMAT_VERSION_V1;
+}
+
+// v1 name references that v2 expresses as ids: `<kind>.<field>` -> the
+// collection the field points into. Only `models.provider_key` needs it —
+// `RoutingTarget.model` still accepts a model alias in v2 (its `model_id` is
+// optional and merely authoritative when present).
+const NAME_REFERENCE_FIELDS = [
+  { kind: 'models', field: 'provider_key', target: 'provider_keys' },
+];
+
+function orderIdFirst(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  const { id, ...rest } = row;
+  return id === undefined ? row : { id, ...rest };
+}
+
+// Give every row an `id`, deriving it from the row's identity when absent.
+//
+// The derived value is exactly what aisix <= 1.10 computed for the same row
+// (`uuid5(FILE_RESOURCE_NAMESPACE, "<kind>/<identity>")`), which is what makes
+// a v1 -> v2 migration id-preserving: provider_key_id / api_key_id values in
+// metrics, access logs and budget accounting continue to name the same
+// resource instead of churning on upgrade.
+export function assignIds(doc) {
+  const out = { ...doc };
+  const fill = (container, kinds) => {
+    const next = { ...container };
+    for (const kind of kinds) {
+      const rows = container?.[kind];
+      if (!Array.isArray(rows)) continue;
+      next[kind] = rows.map((row) => {
+        const ordered = orderIdFirst(row);
+        if (!ordered || typeof ordered !== 'object') return ordered;
+        if (typeof ordered.id === 'string' && ordered.id) return ordered;
+        const identity = identityOf(kind, ordered);
+        return identity ? { id: deriveId(kind, identity), ...ordered } : ordered;
+      });
+    }
+    return next;
+  };
+  Object.assign(out, fill(doc, KINDS));
+  // The shared `global` prefix holds documents for every collection too.
+  if (doc && typeof doc.global === 'object' && !Array.isArray(doc.global)) {
+    out.global = fill(doc.global, KINDS);
+  }
+  return out;
+}
+
+// Rewrite v1 name references into v2 id references, using the ids already
+// present in `doc` (so call assignIds first).
+export function toIdReferences(doc) {
+  let out = doc;
+  for (const { kind, field, target } of NAME_REFERENCE_FIELDS) {
+    const rows = out?.[kind];
+    if (!Array.isArray(rows)) continue;
+    const byName = new Map();
+    for (const row of out[target] ?? []) {
+      if (row && typeof row === 'object' && row.display_name !== undefined) {
+        byName.set(row.display_name, row.id ?? deriveId(target, row.display_name));
+      }
+    }
+    const idField = `${field}_id`;
+    out = {
+      ...out,
+      [kind]: rows.map((row) => {
+        if (!row || typeof row !== 'object' || row[field] === undefined) return row;
+        const { [field]: name, ...rest } = row;
+        const id = byName.get(name);
+        // An unresolvable name is left untouched so `aisix validate` names the
+        // bad reference, rather than us inventing an id that points nowhere.
+        return id ? { ...rest, [idField]: id } : { [field]: name, ...rest };
+      }),
+    };
+  }
+  return out;
+}
+
+// v1 -> v2, the whole transformation. Idempotent: a document that is already
+// v2 (every row has an id, references are ids) comes back unchanged.
+export function migrateToV2(doc) {
+  const withIds = assignIds(doc);
+  const referenced = toIdReferences(withIds);
+  const { _format_version: _ignored, ...rest } = referenced;
+  return { _format_version: FORMAT_VERSION_V2, ...rest };
+}
+
+// Keep each row's id across an ordinary save.
+//
+// The per-kind forms build an entry field by field, so `id` does not survive a
+// round-trip through them. Without this, every edit would re-derive the id and
+// — after a rename — silently re-key the resource, orphaning whatever was
+// keyed by the old id (budget rows, metric series, log history). Matching is by
+// identity against the file being replaced, which is the same identity v1 used.
+export function reconcileIds(prevDoc, nextDoc) {
+  if (!prevDoc || formatVersionOf(nextDoc) !== FORMAT_VERSION_V2) return nextDoc;
+  const out = { ...nextDoc };
+  const fill = (container, prevContainer) => {
+    const next = { ...container };
+    for (const kind of KINDS) {
+      const rows = container?.[kind];
+      if (!Array.isArray(rows)) continue;
+      const prevIds = new Map();
+      for (const row of prevContainer?.[kind] ?? []) {
+        if (row && typeof row === 'object' && row.id) prevIds.set(identityOf(kind, row), row.id);
+      }
+      next[kind] = rows.map((row) => {
+        if (!row || typeof row !== 'object' || (typeof row.id === 'string' && row.id)) {
+          return orderIdFirst(row);
+        }
+        const kept = prevIds.get(identityOf(kind, row));
+        const id = kept ?? deriveId(kind, identityOf(kind, row));
+        return orderIdFirst({ id, ...row });
+      });
+    }
+    return next;
+  };
+  Object.assign(out, fill(nextDoc, prevDoc));
+  if (nextDoc?.global && typeof nextDoc.global === 'object' && !Array.isArray(nextDoc.global)) {
+    out.global = fill(nextDoc.global, prevDoc?.global);
+  }
+  return out;
+}
+
+// True when `validate` output is the format-version mismatch, so callers can
+// turn a bare gateway error into an actionable message.
+export function isFormatVersionMismatch(text) {
+  return /unrecognized _format_version/i.test(String(text ?? ''));
+}
+
+// ── Name <-> id reference translation ────────────────────────────────────
+// A v1 file names the thing a row points at; a v2 file carries its UUID. The
+// views keep the v1 spelling (a name picker is far easier to use than a uuid
+// box), so the translation happens at the API boundary: `externalizeRefs` on
+// the way out, `internalizeRefs` on the way in.
+//
+// Upstream removed the sugar layer in 1.11, so on a v2 file the id spelling is
+// the ONLY thing the gateway accepts — writing the name would be an unknown
+// field. Adding a reference field later is one entry in this table.
+const REFERENCE_FIELDS = [
+  { kind: 'models', name: 'provider_key', id: 'provider_key_id', target: 'provider_keys' },
+];
+
+function targetIdByName(doc, target, name) {
+  for (const row of doc?.[target] ?? []) {
+    if (row && typeof row === 'object' && row.display_name === name) {
+      return row.id ?? deriveId(target, name);
+    }
+  }
+  return null;
+}
+
+function targetNameById(doc, target, id) {
+  for (const row of doc?.[target] ?? []) {
+    if (!row || typeof row !== 'object') continue;
+    if (row.id === id) return row.display_name ?? null;
+    if (!row.id && row.display_name !== undefined && deriveId(target, row.display_name) === id) {
+      return row.display_name;
+    }
+  }
+  return null;
+}
+
+// Server -> view: present an id reference under its v1 name, so a v2 file does
+// not turn every provider-key picker into a raw uuid.
+export function externalizeRefs(kind, entry, doc) {
+  const specs = REFERENCE_FIELDS.filter((s) => s.kind === kind);
+  if (!specs.length || !entry || typeof entry !== 'object') return entry;
+  let out = { ...entry };
+  for (const { name, id, target } of specs) {
+    if (out[name] !== undefined || out[id] === undefined) continue;
+    const resolved = targetNameById(doc, target, out[id]);
+    if (resolved == null) continue; // keep the raw id rather than show nothing
+    const { [id]: _dropped, ...rest } = out;
+    out = { [name]: resolved, ...rest };
+  }
+  return out;
+}
+
+// View -> server: write the spelling the file's format version requires.
+export function internalizeRefs(kind, entry, doc, formatVersion) {
+  const specs = REFERENCE_FIELDS.filter((s) => s.kind === kind);
+  if (!specs.length || !entry || typeof entry !== 'object') return entry;
+  let out = { ...entry };
+  for (const { name, id, target } of specs) {
+    const hasName = out[name] !== undefined;
+    const hasId = out[id] !== undefined;
+    if (!hasName && !hasId) continue;
+    const value = hasName ? out[name] : out[id];
+    // Both spellings are removed, then exactly one is written back, so a stale
+    // copy can never ride along as an unknown field.
+    const { [name]: _name, [id]: _id, ...rest } = out;
+    if (formatVersion === FORMAT_VERSION_V2) {
+      const resolved = hasName ? targetIdByName(doc, target, value) : value;
+      out = resolved ? { ...rest, [id]: resolved } : { ...rest, [name]: value };
+    } else {
+      // v1 references by name, so an id coming from a v2-shaped form is
+      // resolved back rather than dropped.
+      const asName = hasName ? value : targetNameById(doc, target, value);
+      out = asName ? { ...rest, [name]: asName } : rest;
+    }
+  }
+  return out;
+}
+
+// A named reference that does not exist (v2 only — v1 lets the gateway's own
+// loader report it). Returns a message for the route to reject with, else null.
+export function unresolvedReference(kind, entry, doc, formatVersion) {
+  if (formatVersion !== FORMAT_VERSION_V2) return null;
+  for (const { kind: k, name, target } of REFERENCE_FIELDS) {
+    if (k !== kind) continue;
+    const value = entry?.[name];
+    if (value === undefined || value === '') continue;
+    if (targetIdByName(doc, target, value) == null) {
+      return `${name} "${value}" 不存在 —— 请先在「上游密钥」里创建它，或改成已有名称`;
+    }
+  }
+  return null;
+}
