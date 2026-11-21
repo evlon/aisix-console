@@ -27,7 +27,40 @@ const KINDS = [
   { key: 'guardrail_attachments', label: () => t('resources.kindGuardrailAttach') },
   { key: 'passthrough_routes', label: () => t('resources.kindPassthrough') },
   { key: 'mcp_auth_settings', label: () => t('resources.kindMcpAuth') },
+  // Newer aisix collections. These have complex or composite shapes upstream,
+  // so the form does not model them: they are listed here and edited through
+  // the raw-YAML tab, which round-trips the entry exactly.
+  { key: 'teams', label: () => t('resources.kindTeams') },
+  { key: 'users', label: () => t('resources.kindUsers') },
+  { key: 'pricing', label: () => t('resources.kindPricing') },
+  { key: 'budgets', label: () => t('resources.kindBudgets') },
+  { key: 'budget_policy', label: () => t('resources.kindBudgetPolicy') },
+  { key: 'usage_accounting', label: () => t('resources.kindUsageAccounting') },
+  { key: 'mcp_policies', label: () => t('resources.kindMcpPolicies') },
 ];
+
+// Kinds with no form branch: the modal opens on the raw-YAML tab.
+const RAW_YAML_ONLY = new Set([
+  'teams',
+  'users',
+  'pricing',
+  'budgets',
+  'budget_policy',
+  'usage_accounting',
+  'mcp_policies',
+]);
+
+// Starting point for a new entry, so the raw tab is not an empty box. Only the
+// fields upstream requires are pre-filled; the rest is left to the operator.
+const RAW_SKELETONS = {
+  teams: { name: '' },
+  users: { name: '' },
+  pricing: { key: '', input_per_1k: 0, output_per_1k: 0 },
+  budgets: { scope: 'api_key', scope_ref: '', period: 'day' },
+  budget_policy: { fail_mode: 'sticky', closed_grace_seconds: 60 },
+  usage_accounting: { exclude_estimated_usage: false },
+  mcp_policies: { scope: 'env', allow: ['*'], enabled: true },
+};
 
 const IDENTITY = {
   mcp_servers: 'name',
@@ -38,19 +71,33 @@ const IDENTITY = {
   guardrail_attachments: null, // composite: guardrail_id + scope_type + scope_id
   passthrough_routes: 'name',
   mcp_auth_settings: null, // singleton
+  teams: 'name',
+  users: 'name',
+  pricing: 'key', // pricing is keyed by its lookup key, not a name
+  budgets: null, // composite: scope + scope_ref
+  budget_policy: null, // singleton
+  usage_accounting: null, // singleton
+  mcp_policies: null, // composite: scope + scope_ref
 };
 
 // Compute a stable URL identity for an entry, mirroring the backend
-// `identityOf` (composite triple for attachments, fixed for the singleton).
+// `identityOf` exactly (composite triple for attachments, fixed for the
+// singletons, scope-based for budgets / mcp_policies).
 function urlIdentityOf(e) {
   const k = activeKind.value;
-  if (k === 'mcp_auth_settings') return 'mcp_auth_settings';
+  if (k === 'mcp_auth_settings' || k === 'budget_policy' || k === 'usage_accounting') return k;
   if (k === 'guardrail_attachments') {
     const g = e?.guardrail_id ?? '';
     const t = e?.scope_type ?? '';
     const s = e?.scope_id ?? '-';
     return `${g}/${t}/${s}`;
   }
+  if (k === 'budgets') {
+    return e?.scope === 'tag'
+      ? `tag:${e?.tag?.key ?? ''}=${e?.tag?.value ?? ''}`
+      : `${e?.scope ?? ''}:${e?.scope_ref ?? ''}`;
+  }
+  if (k === 'mcp_policies') return e?.scope === 'team' ? `team:${e?.scope_ref ?? ''}` : 'env';
   const field = IDENTITY[k];
   return e?.[field] ?? e?.name ?? e?.display_name ?? '';
 }
@@ -130,6 +177,11 @@ function emptyEntry() {
       anonymous_source_cidrs: '', anonymous_servers: '', anonymous_aggregate_entry: false,
     };
   }
+  if (RAW_YAML_ONLY.has(k)) {
+    // The form is not used for these; the raw tab owns them. An empty object
+    // keeps the modal harmless if the tabs are switched by hand.
+    return { ...(RAW_SKELETONS[k] ?? {}) };
+  }
   // claim_mappings
   return {
     name: '', jwt_provider: '', priority: 0,
@@ -166,6 +218,14 @@ function openCreate() {
   form.value = emptyEntry();
   editing.value = { original: null };
   lastResult.value = null;
+  const kind = activeKind.value;
+  if (RAW_YAML_ONLY.has(kind)) {
+    // No form for these: open on the raw tab with a minimal, valid skeleton so
+    // the operator is not staring at an empty editor.
+    tab.value = 'raw';
+    rawText.value = stringifyYaml(RAW_SKELETONS[kind] ?? {}, { lineWidth: 0 });
+    return;
+  }
   tab.value = 'form';
   rawText.value = '';
 }
@@ -174,6 +234,13 @@ function openEdit(e) {
   editing.value = { original: e };
   const f = JSON.parse(JSON.stringify(e));
   const k = activeKind.value;
+  if (RAW_YAML_ONLY.has(k)) {
+    form.value = f;
+    lastResult.value = null;
+    tab.value = 'raw';
+    rawText.value = stringifyYaml(e, { lineWidth: 0 });
+    return;
+  }
   if (k === 'mcp_servers') {
     f.spec_text = e.spec ? JSON.stringify(e.spec, null, 2) : '';
     f.scopes = e.scopes?.length ? e.scopes : [''];
@@ -250,6 +317,12 @@ function openEdit(e) {
 function buildEntry() {
   const f = JSON.parse(JSON.stringify(form.value));
   const k = activeKind.value;
+
+  if (RAW_YAML_ONLY.has(k)) {
+    // Refuse rather than write a half-empty row built from a form that does not
+    // model this resource. The raw tab is the supported path.
+    throw new Error(t('resources.useRawYaml'));
+  }
 
   if (k === 'mcp_servers') {
     const out = clean({
@@ -539,6 +612,12 @@ function tableCols() {
   if (k === 'guardrail_attachments') return ['guardrail_id', 'scope_type', 'scope_id', 'priority', 'enabled'];
   if (k === 'passthrough_routes') return ['name', 'path_prefix', 'target_url', 'enabled'];
   if (k === 'mcp_auth_settings') return ['resource_url', 'anonymous'];
+  if (k === 'teams' || k === 'users') return ['name'];
+  if (k === 'pricing') return ['key', 'input_per_1k', 'output_per_1k'];
+  if (k === 'budgets') return ['scope', 'scope_ref', 'period'];
+  if (k === 'budget_policy') return ['fail_mode', 'closed_grace_seconds'];
+  if (k === 'usage_accounting') return ['exclude_estimated_usage'];
+  if (k === 'mcp_policies') return ['scope', 'scope_ref', 'enabled'];
   return ['name', 'jwt_provider', 'priority', 'enabled'];
 }
 
@@ -547,6 +626,15 @@ function tableCols() {
 const COL_LABELS = {
   destination: 'obs.colDestination',
   content: 'obs.colContent',
+  key: 'resources.colPricingKey',
+  scope: 'resources.colScope',
+  scope_ref: 'resources.colScopeRef',
+  period: 'resources.colPeriod',
+  input_per_1k: 'resources.colInputPer1k',
+  output_per_1k: 'resources.colOutputPer1k',
+  fail_mode: 'resources.colFailMode',
+  closed_grace_seconds: 'resources.colGraceSeconds',
+  exclude_estimated_usage: 'resources.colExcludeEstimated',
 };
 function colLabel(c) {
   if (c === 'display_name' || c === 'name') return t('common.name');
@@ -558,13 +646,19 @@ function colLabel(c) {
 function cell(e, col) {
   if (col === 'enabled') return e.enabled ? t('common.enabled') : t('common.disabled');
   if (col === 'anonymous') return e.anonymous ? t('common.enabled') : t('common.disabled');
-  if (col === 'display_name' || col === 'name') return e.display_name ?? e.name ?? '—';
+  if (col === 'display_name' || col === 'name' || col === 'key') return e[col] ?? '—';
   // "Where does it send", which the old name/kind/enabled row could not answer.
   if (col === 'destination') return destinationOf(e) || '—';
   if (col === 'content') {
     return contentModeOf(e) === 'full' ? t('obs.contentFull') : t('obs.contentMetadata');
   }
-  return e[col] ?? '—';
+  const v = e[col];
+  // The newer collections carry booleans and arrays; without this a `false`
+  // renders as the string "false" and an empty list as a blank cell.
+  if (typeof v === 'boolean') return v ? t('common.enabled') : t('common.disabled');
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  if (v && typeof v === 'object') return JSON.stringify(v);
+  return v ?? '—';
 }
 
 onMounted(load);
@@ -805,6 +899,11 @@ onMounted(load);
           :draft="form"
           :original="editing?.original"
         />
+
+        <!-- collections the form does not model -->
+        <template v-else-if="RAW_YAML_ONLY.has(activeKind)">
+          <p class="muted">{{ t('resources.useRawYaml') }}</p>
+        </template>
 
         <!-- guardrail attachments -->
         <template v-else-if="activeKind === 'guardrail_attachments'">

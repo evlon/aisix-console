@@ -5,8 +5,14 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-// Canonical collection order emitted by the file loader. Mirrors aisix
-// v1.5.0 `filesource::KINDS` (14 collections).
+// Canonical collection order emitted by the file loader.
+//
+// The first fourteen mirror aisix v1.5.0 `filesource::KINDS`. The rest are
+// collections aisix added afterwards (they are `Resource::kind()` values, and
+// all seven load fine from a resources file — verified against the 1.11.0
+// binary). They are APPENDED rather than interleaved so an existing file keeps
+// its layout when the console rewrites it; the order is cosmetic either way,
+// since the file is a set of rows.
 export const KINDS = [
   'provider_keys',
   'models',
@@ -22,15 +28,21 @@ export const KINDS = [
   'claim_mappings',
   'passthrough_routes',
   'mcp_auth_settings',
+  // aisix >= 1.9 collections the console now lists as well.
+  'teams',
+  'users',
+  'pricing',
+  'budgets',
+  'budget_policy',
+  'usage_accounting',
+  'mcp_policies',
 ];
 
 // Identity field name per kind (used for list/get/upsert/remove and
 // duplicate detection). provider_keys/models/api_keys use display_name;
 // mcp_servers/a2a_agents/passthrough_routes accept name-or-display_name
-// (canonical spelling is `name`, see desugar.rs IdentityField); the rest
-// use `name`. guardrail_attachments use a composite (guardrail_id +
-// scope_type + scope_id) triple, and mcp_auth_settings is a per-file
-// singleton with a fixed identity.
+// (canonical spelling is `name`); the rest use `name`. `null` means the kind
+// has no single-field identity — see identityOf below.
 export const IDENTITY_FIELD = {
   provider_keys: 'display_name',
   models: 'display_name',
@@ -46,12 +58,30 @@ export const IDENTITY_FIELD = {
   claim_mappings: 'name',
   passthrough_routes: 'name',
   mcp_auth_settings: null, // singleton: fixed identity "mcp_auth_settings"
+  // Newer collections.
+  teams: 'name',
+  users: 'name',
+  pricing: 'key', // `pricing` is keyed by its lookup key, not by a name
+  budgets: null, // composite: scope + scope_ref
+  budget_policy: null, // singleton
+  usage_accounting: null, // singleton
+  mcp_policies: null, // composite: scope + scope_ref
 };
 
-// Composite / fixed identities for kinds whose identity is not a single
-// plain field (guardrail_attachments triple, mcp_auth_settings singleton).
+// Kinds with exactly one document per file.
 export const FIXED_IDENTITIES = {
   mcp_auth_settings: 'mcp_auth_settings',
+  budget_policy: 'budget_policy',
+  usage_accounting: 'usage_accounting',
+};
+
+// Kinds identified by a combination of fields.
+const COMPOSITE_IDENTITIES = {
+  budgets: (e) =>
+    e?.scope === 'tag'
+      ? `tag:${e?.tag?.key ?? ''}=${e?.tag?.value ?? ''}`
+      : `${e?.scope ?? ''}:${e?.scope_ref ?? ''}`,
+  mcp_policies: (e) => (e?.scope === 'team' ? `team:${e?.scope_ref ?? ''}` : 'env'),
 };
 
 export function bootstrapTemplate() {
@@ -157,9 +187,8 @@ export async function loadFileCached(filePath) {
 }
 
 export function identityOf(kind, entry) {
-  if (kind === 'mcp_auth_settings') {
-    return FIXED_IDENTITIES.mcp_auth_settings;
-  }
+  if (FIXED_IDENTITIES[kind]) return FIXED_IDENTITIES[kind];
+  if (COMPOSITE_IDENTITIES[kind]) return COMPOSITE_IDENTITIES[kind](entry);
   if (kind === 'guardrail_attachments') {
     // Composite identity: guardrail_id + scope_type (+ scope_id; `-` for
     // absent, matching desugar.rs IdentityField::AttachmentTriple).
@@ -183,7 +212,7 @@ export function findIndex(collection, kind, identity) {
 // Return the plain identity FIELD (for CRUD routes that read/write a single
 // field). Returns null for composite/singleton identities.
 export function identityFieldOf(kind) {
-  if (kind === 'mcp_auth_settings' || kind === 'guardrail_attachments') return null;
+  if (IDENTITY_FIELD[kind] === null) return null;
   return IDENTITY_FIELD[kind] ?? 'name';
 }
 
@@ -305,10 +334,6 @@ export function formatVersionOf(doc) {
 // collection the field points into. Only `models.provider_key` needs it —
 // `RoutingTarget.model` still accepts a model alias in v2 (its `model_id` is
 // optional and merely authoritative when present).
-const NAME_REFERENCE_FIELDS = [
-  { kind: 'models', field: 'provider_key', target: 'provider_keys' },
-];
-
 function orderIdFirst(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
   const { id, ...rest } = row;
@@ -348,30 +373,26 @@ export function assignIds(doc) {
 }
 
 // Rewrite v1 name references into v2 id references, using the ids already
-// present in `doc` (so call assignIds first).
+// present in `doc` (so call assignIds first). It drives the same REFERENCES
+// table as `internalizeRefs`, so a reference added there is migrated too.
 export function toIdReferences(doc) {
-  let out = doc;
-  for (const { kind, field, target } of NAME_REFERENCE_FIELDS) {
-    const rows = out?.[kind];
-    if (!Array.isArray(rows)) continue;
-    const byName = new Map();
-    for (const row of out[target] ?? []) {
-      if (row && typeof row === 'object' && row.display_name !== undefined) {
-        byName.set(row.display_name, row.id ?? deriveId(target, row.display_name));
-      }
+  const out = { ...doc };
+  const table = (container) => {
+    const next = { ...container };
+    for (const kind of KINDS) {
+      const rows = container?.[kind];
+      if (!Array.isArray(rows)) continue;
+      // Look the reference up in the whole id-assigned input, not in the
+      // partially rewritten output.
+      next[kind] = rows.map((row) =>
+        row && typeof row === 'object' ? internalizeRefs(kind, row, doc, FORMAT_VERSION_V2) : row,
+      );
     }
-    const idField = `${field}_id`;
-    out = {
-      ...out,
-      [kind]: rows.map((row) => {
-        if (!row || typeof row !== 'object' || row[field] === undefined) return row;
-        const { [field]: name, ...rest } = row;
-        const id = byName.get(name);
-        // An unresolvable name is left untouched so `aisix validate` names the
-        // bad reference, rather than us inventing an id that points nowhere.
-        return id ? { ...rest, [idField]: id } : { [field]: name, ...rest };
-      }),
-    };
+    return next;
+  };
+  Object.assign(out, table(doc));
+  if (doc?.global && typeof doc.global === 'object' && !Array.isArray(doc.global)) {
+    out.global = table(doc.global);
   }
   return out;
 }
@@ -430,22 +451,108 @@ export function isFormatVersionMismatch(text) {
 
 // ── Name <-> id reference translation ────────────────────────────────────
 // A v1 file names the thing a row points at; a v2 file carries its UUID. The
-// views keep the v1 spelling (a name picker is far easier to use than a uuid
-// box), so the translation happens at the API boundary: `externalizeRefs` on
-// the way out, `internalizeRefs` on the way in.
+// views keep the v1 spelling (a name picker beats a uuid box), so translation
+// happens at the API boundary: `externalizeRefs` on the way out,
+// `internalizeRefs` on the way in.
 //
 // Upstream removed the sugar layer in 1.11, so on a v2 file the id spelling is
-// the ONLY thing the gateway accepts — writing the name would be an unknown
-// field. Adding a reference field later is one entry in this table.
-const REFERENCE_FIELDS = [
-  { kind: 'models', name: 'provider_key', id: 'provider_key_id', target: 'provider_keys' },
+// the ONLY thing the gateway accepts — a name is an unknown value, and for the
+// embedded string forms it is silently the wrong lookup key.
+//
+// Each entry is one reference. Three shapes are covered:
+//   - renamed field      v1 `provider_key`        -> v2 `provider_key_id`
+//   - same field, new value  `guardrail_id` holds a name in v1, a uuid in v2
+//   - embedded in a string   `applies_to: "api_key:<ref>"`
+// Sources for what v2 expects (aisix 1.11.0):
+//   crates/aisix-core/src/models/cache_policy.rs  applies_to supports
+//     "model:<name>" but "api_key:<id>"
+//   crates/aisix-core/src/models/budget.rs        scope_ref for api_key is an id
+//   schemas/resources/*.schema.json               which fields are uuids
+const REFERENCES = [
+  { kind: 'models', field: 'provider_key', idField: 'provider_key_id', target: 'provider_keys' },
+  { kind: 'passthrough_routes', field: 'provider_key', idField: 'provider_key_id', target: 'provider_keys' },
+  { kind: 'passthrough_routes', field: 'anonymous_key', idField: 'anonymous_key_id', target: 'api_keys' },
+  { kind: 'claim_mappings', field: 'resolve.api_key', idField: 'resolve.api_key_id', target: 'api_keys' },
+  { kind: 'guardrail_attachments', field: 'guardrail_id', target: 'guardrails' },
+  {
+    kind: 'guardrail_attachments',
+    field: 'scope_id',
+    // The scope id points into whichever collection `scope_type` names.
+    targetFrom: {
+      field: 'scope_type',
+      map: {
+        model: 'models',
+        mcp_server: 'mcp_servers',
+        api_key: 'api_keys',
+        team: 'teams',
+        passthrough_route: 'passthrough_routes',
+      },
+    },
+  },
+  { kind: 'rate_limit_policies', field: 'scope_ref', target: 'api_keys', when: (row) => row.scope === 'api_key' },
+  { kind: 'cache_policies', field: 'applies_to', target: 'api_keys', embed: 'api_key:' },
+  // budgets.rs: `scope_ref` is "the id of the capped resource", and which
+  // collection that is depends on `scope` (absent for `org`/`environment`/`tag`).
+  {
+    kind: 'budgets',
+    field: 'scope_ref',
+    targetFrom: {
+      field: 'scope',
+      map: {
+        api_key: 'api_keys',
+        member: 'users',
+        team: 'teams',
+        team_member: 'teams',
+        provider_key: 'provider_keys',
+      },
+    },
+  },
+  // mcp_policy.rs: scope is `env` (no ref) or `team` (scope_ref names the team).
+  { kind: 'mcp_policies', field: 'scope_ref', target: 'teams', when: (row) => row.scope === 'team' },
 ];
 
+function getPath(obj, path) {
+  return path.split('.').reduce((acc, part) => (acc == null ? undefined : acc[part]), obj);
+}
+
+// Clone along the path so callers never mutate the row they were handed.
+function withPath(row, path, value) {
+  const parts = path.split('.');
+  const clone = { ...row };
+  let cur = clone;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i];
+    if (!cur[k] || typeof cur[k] !== 'object') return row; // path absent: nothing to rewrite
+    cur[k] = { ...cur[k] };
+    cur = cur[k];
+  }
+  cur[parts[parts.length - 1]] = value;
+  return clone;
+}
+
+// Remove a (possibly nested) field. A missing path is a no-op.
+function dropPath(row, path) {
+  const parts = path.split('.');
+  if (parts.length === 1) {
+    const { [path]: _dropped, ...rest } = row;
+    return rest;
+  }
+  const parentPath = parts.slice(0, -1).join('.');
+  const parent = getPath(row, parentPath);
+  if (!parent || typeof parent !== 'object') return row;
+  const { [parts[parts.length - 1]]: _dropped, ...parentRest } = parent;
+  return withPath(row, parentPath, parentRest);
+}
+
+// Look the reference up in the collection it points into, using that kind's own
+// identity field (`display_name` for provider keys / api keys / models, `name`
+// for guardrails / mcp servers / passthrough routes). A row without an explicit
+// id still resolves through the derived id, so a v1 file (no ids) and a v2 file
+// (ids) both answer.
 function targetIdByName(doc, target, name) {
   for (const row of doc?.[target] ?? []) {
-    if (row && typeof row === 'object' && row.display_name === name) {
-      return row.id ?? deriveId(target, name);
-    }
+    if (!row || typeof row !== 'object') continue;
+    if (identityOf(target, row) === name) return row.id ?? deriveId(target, name);
   }
   return null;
 }
@@ -453,52 +560,92 @@ function targetIdByName(doc, target, name) {
 function targetNameById(doc, target, id) {
   for (const row of doc?.[target] ?? []) {
     if (!row || typeof row !== 'object') continue;
-    if (row.id === id) return row.display_name ?? null;
-    if (!row.id && row.display_name !== undefined && deriveId(target, row.display_name) === id) {
-      return row.display_name;
-    }
+    const identity = identityOf(target, row);
+    if (row.id === id) return identity;
+    if (!row.id && identity && deriveId(target, identity) === id) return identity;
   }
   return null;
 }
 
-// Server -> view: present an id reference under its v1 name, so a v2 file does
-// not turn every provider-key picker into a raw uuid.
+function targetsFor(spec, row) {
+  if (spec.when && !spec.when(row)) return null;
+  if (spec.target) return spec.target;
+  const which = getPath(row, spec.targetFrom.field);
+  return spec.targetFrom.map[which] ?? null;
+}
+
+function resolveTargetId(doc, target, ref) {
+  return ref ? targetIdByName(doc, target, ref) : null;
+}
+
+// Server -> view: present each id reference under its v1 spelling.
 export function externalizeRefs(kind, entry, doc) {
-  const specs = REFERENCE_FIELDS.filter((s) => s.kind === kind);
+  const specs = REFERENCES.filter((s) => s.kind === kind);
   if (!specs.length || !entry || typeof entry !== 'object') return entry;
   let out = { ...entry };
-  for (const { name, id, target } of specs) {
-    if (out[name] !== undefined || out[id] === undefined) continue;
-    const resolved = targetNameById(doc, target, out[id]);
-    if (resolved == null) continue; // keep the raw id rather than show nothing
-    const { [id]: _dropped, ...rest } = out;
-    out = { [name]: resolved, ...rest };
+  for (const spec of specs) {
+    const target = targetsFor(spec, out);
+    if (!target) continue;
+    const readPath = spec.idField ?? spec.field;
+
+    if (spec.embed) {
+      // "<prefix><ref>" — translate the ref part, keep the prefix.
+      const raw = getPath(out, spec.field);
+      if (typeof raw !== 'string' || !raw.startsWith(spec.embed)) continue;
+      const name = targetNameById(doc, target, raw.slice(spec.embed.length));
+      if (name != null) out = withPath(out, spec.field, spec.embed + name);
+      continue;
+    }
+
+    const value = getPath(out, readPath);
+    if (value === undefined || value === '') continue;
+    // Already v1-shaped (a name we can see in the collection)? Leave it.
+    if (typeof value === 'string' && targetIdByName(doc, target, value) != null) continue;
+    const name = targetNameById(doc, target, value);
+    if (name == null) continue; // unresolvable: keep the raw uuid rather than blank it
+
+    if (readPath === spec.field) {
+      out = withPath(out, spec.field, name);
+    } else {
+      out = withPath(dropPath(out, readPath), spec.field, name);
+    }
   }
   return out;
 }
 
 // View -> server: write the spelling the file's format version requires.
 export function internalizeRefs(kind, entry, doc, formatVersion) {
-  const specs = REFERENCE_FIELDS.filter((s) => s.kind === kind);
+  const specs = REFERENCES.filter((s) => s.kind === kind);
   if (!specs.length || !entry || typeof entry !== 'object') return entry;
+  const v2 = formatVersion === FORMAT_VERSION_V2;
   let out = { ...entry };
-  for (const { name, id, target } of specs) {
-    const hasName = out[name] !== undefined;
-    const hasId = out[id] !== undefined;
-    if (!hasName && !hasId) continue;
-    const value = hasName ? out[name] : out[id];
-    // Both spellings are removed, then exactly one is written back, so a stale
-    // copy can never ride along as an unknown field.
-    const { [name]: _name, [id]: _id, ...rest } = out;
-    if (formatVersion === FORMAT_VERSION_V2) {
-      const resolved = hasName ? targetIdByName(doc, target, value) : value;
-      out = resolved ? { ...rest, [id]: resolved } : { ...rest, [name]: value };
-    } else {
-      // v1 references by name, so an id coming from a v2-shaped form is
-      // resolved back rather than dropped.
-      const asName = hasName ? value : targetNameById(doc, target, value);
-      out = asName ? { ...rest, [name]: asName } : rest;
+  for (const spec of specs) {
+    const target = targetsFor(spec, out);
+    if (!target) continue;
+
+    if (spec.embed) {
+      const raw = getPath(out, spec.field);
+      if (typeof raw !== 'string' || !raw.startsWith(spec.embed)) continue;
+      const ref = raw.slice(spec.embed.length);
+      const resolved = v2 ? (resolveTargetId(doc, target, ref) ?? ref) : (targetNameById(doc, target, ref) ?? ref);
+      out = withPath(out, spec.field, spec.embed + resolved);
+      continue;
     }
+
+    const idPath = spec.idField ?? spec.field;
+    const value = getPath(out, spec.field) ?? getPath(out, idPath);
+    // Both spellings are removed first, so a stale copy can never ride along as
+    // an unknown field, then exactly one is written back.
+    for (const p of new Set([spec.field, idPath])) out = dropPath(out, p);
+    if (value === undefined || value === '') continue;
+
+    const toPath = v2 ? idPath : spec.field;
+    // Resolve to the target's id (v2) or name (v1); a value that is already in
+    // the wanted form simply passes through unresolved.
+    const resolved = v2
+      ? (resolveTargetId(doc, target, value) ?? value)
+      : (targetNameById(doc, target, value) ?? value);
+    out = withPath(out, toPath, resolved);
   }
   return out;
 }
@@ -507,12 +654,24 @@ export function internalizeRefs(kind, entry, doc, formatVersion) {
 // loader report it). Returns a message for the route to reject with, else null.
 export function unresolvedReference(kind, entry, doc, formatVersion) {
   if (formatVersion !== FORMAT_VERSION_V2) return null;
-  for (const { kind: k, name, target } of REFERENCE_FIELDS) {
-    if (k !== kind) continue;
-    const value = entry?.[name];
-    if (value === undefined || value === '') continue;
-    if (targetIdByName(doc, target, value) == null) {
-      return `${name} "${value}" 不存在 —— 请先在「上游密钥」里创建它，或改成已有名称`;
+  for (const spec of REFERENCES.filter((s) => s.kind === kind)) {
+    const target = targetsFor(spec, entry);
+    if (!target) continue;
+    const raw = getPath(entry, spec.field);
+    if (raw === undefined || raw === '') continue;
+    if (spec.embed) {
+      // Only the literal `api_key:` form is a reference; `all` and
+      // `model:<name>` are not.
+      if (typeof raw !== 'string' || !raw.startsWith(spec.embed)) continue;
+      const ref = raw.slice(spec.embed.length);
+      if (targetIdByName(doc, target, ref) == null && targetNameById(doc, target, ref) == null) {
+        return `${spec.field} "${raw}" 指向的引用不存在`;
+      }
+      continue;
+    }
+    if (typeof raw !== 'string') continue;
+    if (targetIdByName(doc, target, raw) == null && targetNameById(doc, target, raw) == null) {
+      return `${spec.field} "${raw}" 不存在 —— 请先创建它，或改成已有名称`;
     }
   }
   return null;

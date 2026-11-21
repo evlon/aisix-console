@@ -21,6 +21,9 @@ import {
   externalizeRefs,
   internalizeRefs,
   unresolvedReference,
+  identityOf,
+  KINDS,
+  IDENTITY_FIELD,
   FORMAT_VERSION_V1,
   FORMAT_VERSION_V2,
 } from '../src/resources.js';
@@ -90,11 +93,14 @@ test('toIdReferences rewrites models.provider_key into provider_key_id', () => {
   assert.equal(out.models[1].provider_key_id, undefined);
 });
 
-test('toIdReferences leaves an unresolvable name alone rather than inventing an id', () => {
+test('an unresolvable reference is preserved, never replaced by an invented id', () => {
   const doc = assignIds({ ...V1_DOC, models: [{ display_name: 'm', provider_key: 'nope' }] });
   const out = toIdReferences(doc);
-  assert.equal(out.models[0].provider_key, 'nope');
-  assert.equal(out.models[0].provider_key_id, undefined);
+  // The value survives so `aisix validate` can name the bad reference; what
+  // must NOT happen is us minting a uuid that points at nothing.
+  assert.equal(out.models[0].provider_key_id, 'nope');
+  assert.equal(out.models[0].provider_key, undefined);
+  assert.equal(out.models[0].id, deriveId('models', 'm'));
 });
 
 test('migrateToV2 produces a v2 doc with ids and id references, and is idempotent', () => {
@@ -106,10 +112,45 @@ test('migrateToV2 produces a v2 doc with ids and id references, and is idempoten
   assert.deepEqual(twice, once);
 });
 
-test('migrateToV2 keeps collections it does not manage', () => {
-  const out = migrateToV2({ ...V1_DOC, pricing: [{ name: 'p' }], global: { teams: [{ name: 't' }] } });
-  assert.deepEqual(out.pricing, [{ name: 'p' }]);
-  assert.deepEqual(out.global.teams, [{ name: 't' }]);
+test('migrateToV2 keeps unknown collections verbatim, and ids the ones it knows', () => {
+  const out = migrateToV2({ ...V1_DOC, pricing: [{ key: 'p' }], some_future_kind: [{ x: 1 }] });
+  // `pricing` is a registered kind now, so it gets its derived id...
+  assert.equal(out.pricing[0].id, deriveId('pricing', 'p'));
+  // ...while a key this build does not know is left exactly as it was.
+  assert.deepEqual(out.some_future_kind, [{ x: 1 }]);
+});
+
+test('the newer collections resolve an identity for list/CRUD', () => {
+  assert.equal(identityOf('teams', { name: 't1' }), 't1');
+  assert.equal(identityOf('users', { name: 'u1' }), 'u1');
+  assert.equal(identityOf('pricing', { key: 'deepseek-v4-flash' }), 'deepseek-v4-flash');
+  // Composites, since these have no name field.
+  assert.equal(identityOf('budgets', { scope: 'team', scope_ref: 'T' }), 'team:T');
+  assert.equal(identityOf('budgets', { scope: 'tag', tag: { key: 'k', value: 'v' } }), 'tag:k=v');
+  assert.equal(identityOf('mcp_policies', { scope: 'env' }), 'env');
+  assert.equal(identityOf('mcp_policies', { scope: 'team', scope_ref: 'T' }), 'team:T');
+  // Singletons.
+  assert.equal(identityOf('budget_policy', { fail_mode: 'closed' }), 'budget_policy');
+  assert.equal(identityOf('usage_accounting', { exclude_estimated_usage: false }), 'usage_accounting');
+  // A null-collapsing identity would make every row collide in findIndex.
+  assert.notEqual(identityOf('budgets', { scope: 'team', scope_ref: 'A' }), identityOf('budgets', { scope: 'team', scope_ref: 'B' }));
+});
+
+test('every registered kind has an identity, so CRUD cannot collide on ""', () => {
+  for (const kind of KINDS) {
+    assert.ok(kind in IDENTITY_FIELD, `${kind} missing from IDENTITY_FIELD`);
+  }
+  // A null-field kind must be covered by a fixed or composite rule.
+  const kwOwnRule = new Set(['guardrail_attachments', 'budgets', 'mcp_policies', 'budget_policy', 'usage_accounting', 'mcp_auth_settings']);
+  assert.equal(kwOwnRule.size, 6);
+});
+
+test('the newer kinds are file-mode loadable (mirrors the 1.11.0 probe)', () => {
+  // Verified against the real binary: a file with one row of each of these
+  // loaded 7 resources. Guards the KINDS list against a typo that would make
+  // the console write a collection the gateway ignores or rejects.
+  const expected = ['teams', 'users', 'pricing', 'budgets', 'budget_policy', 'usage_accounting', 'mcp_policies'];
+  for (const kind of expected) assert.ok(KINDS.includes(kind), `${kind} not in KINDS`);
 });
 
 test('reconcileIds keeps an id across a save that dropped it', () => {
@@ -211,4 +252,105 @@ test('unresolvedReference names the missing provider key instead of writing a uu
   assert.equal(unresolvedReference('models', { display_name: 'm', provider_key: 'codebuddy' }, doc, FORMAT_VERSION_V2), null);
   // v1 files let the gateway's own loader report it.
   assert.equal(unresolvedReference('models', { display_name: 'm', provider_key: 'nope' }, V1_DOC, FORMAT_VERSION_V1), null);
+});
+
+// ── every other reference the console exposes ────────────────────────────
+// The console's dropdowns write names; v2 wants uuids. Sources for what v2
+// expects are noted on the REFERENCES table in resources.js.
+const REF_DOC = {
+  _format_version: '1',
+  provider_keys: [{ display_name: 'deepseek' }],
+  api_keys: [{ display_name: 'evlon' }],
+  guardrails: [{ name: 'pii' }],
+  models: [{ display_name: 'm1' }],
+  mcp_servers: [{ name: 'echo' }],
+  passthrough_routes: [
+    { name: 'p1', auth_mode: 'anonymous', anonymous_key: 'evlon', credential_mode: 'inject', provider_key: 'deepseek' },
+  ],
+  claim_mappings: [{ name: 'c1', jwt_provider: 'oidc', resolve: { api_key: 'evlon' } }],
+  guardrail_attachments: [{ guardrail_id: 'pii', scope_type: 'model', scope_id: 'm1', priority: 1 }],
+  rate_limit_policies: [{ name: 'rl', scope: 'api_key', scope_ref: 'evlon' }],
+  cache_policies: [{ name: 'cp', applies_to: 'api_key:evlon' }],
+};
+
+test('migration rewrites every reference the console exposes, not just models', () => {
+  const v2 = migrateToV2(REF_DOC);
+  const idOf = (kind, name) => deriveId(kind, name);
+
+  const pr = v2.passthrough_routes[0];
+  assert.equal(pr.provider_key_id, idOf('provider_keys', 'deepseek'));
+  assert.equal(pr.provider_key, undefined);
+  assert.equal(pr.anonymous_key_id, idOf('api_keys', 'evlon'));
+  assert.equal(pr.anonymous_key, undefined);
+
+  const cm = v2.claim_mappings[0];
+  assert.equal(cm.resolve.api_key_id, idOf('api_keys', 'evlon'));
+  assert.equal(cm.resolve.api_key, undefined);
+
+  const ga = v2.guardrail_attachments[0];
+  // Same field name, new value: these hold uuids in v2.
+  assert.equal(ga.guardrail_id, idOf('guardrails', 'pii'));
+  assert.equal(ga.scope_id, idOf('models', 'm1'));
+
+  assert.equal(v2.rate_limit_policies[0].scope_ref, idOf('api_keys', 'evlon'));
+  assert.equal(v2.cache_policies[0].applies_to, `api_key:${idOf('api_keys', 'evlon')}`);
+});
+
+test('scope_id resolves against whichever collection scope_type names', () => {
+  const doc = {
+    ...REF_DOC,
+    guardrail_attachments: [
+      { guardrail_id: 'pii', scope_type: 'mcp_server', scope_id: 'echo', priority: 1 },
+      { guardrail_id: 'pii', scope_type: 'env', priority: 1 },
+    ],
+  };
+  const v2 = migrateToV2(doc);
+  assert.equal(v2.guardrail_attachments[0].scope_id, deriveId('mcp_servers', 'echo'));
+  // scope_type "env" has no scope id at all — left alone.
+  assert.equal(v2.guardrail_attachments[1].scope_id, undefined);
+});
+
+test('scope_ref is only translated for scope=api_key', () => {
+  const doc = { ...REF_DOC, rate_limit_policies: [{ name: 'rl', scope: 'model', scope_ref: 'm1' }] };
+  const v2 = migrateToV2(doc);
+  assert.equal(v2.rate_limit_policies[0].scope_ref, 'm1');
+});
+
+test('applies_to only rewrites the api_key form, leaving all and model:<name>', () => {
+  const doc = {
+    ...REF_DOC,
+    cache_policies: [{ name: 'a', applies_to: 'all' }, { name: 'b', applies_to: 'model:m1' }],
+  };
+  const v2 = migrateToV2(doc);
+  assert.equal(v2.cache_policies[0].applies_to, 'all');
+  assert.equal(v2.cache_policies[1].applies_to, 'model:m1');
+});
+
+test('externalizeRefs brings every reference back to its name for the views', () => {
+  const v2 = migrateToV2(REF_DOC);
+  assert.equal(externalizeRefs('passthrough_routes', v2.passthrough_routes[0], v2).provider_key, 'deepseek');
+  assert.equal(externalizeRefs('passthrough_routes', v2.passthrough_routes[0], v2).anonymous_key, 'evlon');
+  assert.equal(externalizeRefs('claim_mappings', v2.claim_mappings[0], v2).resolve.api_key, 'evlon');
+  const ga = externalizeRefs('guardrail_attachments', v2.guardrail_attachments[0], v2);
+  assert.equal(ga.guardrail_id, 'pii');
+  assert.equal(ga.scope_id, 'm1');
+  assert.equal(externalizeRefs('rate_limit_policies', v2.rate_limit_policies[0], v2).scope_ref, 'evlon');
+  assert.equal(externalizeRefs('cache_policies', v2.cache_policies[0], v2).applies_to, 'api_key:evlon');
+});
+
+test('round-trip is stable for every reference kind', () => {
+  const v2 = migrateToV2(REF_DOC);
+  for (const kind of ['passthrough_routes', 'claim_mappings', 'guardrail_attachments', 'rate_limit_policies', 'cache_policies']) {
+    for (const row of v2[kind]) {
+      const back = internalizeRefs(kind, externalizeRefs(kind, row, v2), v2, FORMAT_VERSION_V2);
+      assert.deepEqual(back, row, `${kind} round-trip drifted`);
+    }
+  }
+});
+
+test('the views never receive a stale v1 spelling on a v2 file', () => {
+  const v2 = migrateToV2(REF_DOC);
+  const pr = externalizeRefs('passthrough_routes', v2.passthrough_routes[0], v2);
+  assert.equal(pr.provider_key_id, undefined);
+  assert.equal(pr.anonymous_key_id, undefined);
 });
