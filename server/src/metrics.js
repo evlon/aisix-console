@@ -96,7 +96,9 @@ function minusLe(labels) {
 }
 
 // ---- store ------------------------------------------------------------------
-function openDb(dbFile) {
+// Exported so tests can drive the aggregation helpers against a real
+// `node:sqlite` database instead of a fake.
+export function openDb(dbFile) {
   const dir = path.dirname(dbFile);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(dbFile);
@@ -113,7 +115,11 @@ function openDb(dbFile) {
        value REAL NOT NULL,
        PRIMARY KEY (metric, labels, ts)
      );
-     CREATE INDEX IF NOT EXISTS idx_samples_metric_ts ON samples (metric, ts);`,
+     CREATE INDEX IF NOT EXISTS idx_samples_metric_ts ON samples (metric, ts);
+     -- MIN/MAX(ts) for coverage, and the retention prune, both scan by ts
+     -- alone; without this they walk every row (hundreds of thousands at a
+     -- 24h retention with a few hundred series).
+     CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples (ts);`,
   );
   return db;
 }
@@ -127,6 +133,25 @@ function latestAt(db, metric, labelsKey, ts) {
     .prepare('SELECT value FROM samples WHERE metric = ? AND labels = ? AND ts <= ? ORDER BY ts DESC LIMIT 1')
     .get(metric, labelsKey, ts);
   return row ? row.value : null;
+}
+
+// First sample at or after `from`, for a series whose baseline retention has
+// already dropped.
+function earliestInWindow(db, metric, labelsKey, from, to) {
+  const row = db
+    .prepare('SELECT value FROM samples WHERE metric = ? AND labels = ? AND ts >= ? AND ts <= ? ORDER BY ts ASC LIMIT 1')
+    .get(metric, labelsKey, from, to);
+  return row ? row.value : null;
+}
+
+// What the store actually holds. A window that starts before this is only
+// partially covered, and the caller must say so rather than present a floor as
+// a full total.
+export function storeCoverage(db, metric = null) {
+  const row = metric
+    ? db.prepare('SELECT MIN(ts) AS a, MAX(ts) AS b FROM samples WHERE metric = ?').get(metric)
+    : db.prepare('SELECT MIN(ts) AS a, MAX(ts) AS b FROM samples').get();
+  return { from: row?.a ?? null, to: row?.b ?? null };
 }
 
 function distinctSeriesInWindow(db, metric, from, to) {
@@ -162,16 +187,23 @@ function labelsMatch(labelsObj, filter) {
 }
 
 // Total counter delta across all series (optionally filtered) over [from,to].
-// Counter resets (end < start) are clamped to 0.
+//
+// A series with no sample at or before `from` has had its true baseline pruned
+// by retention. Subtracting from its earliest retained sample yields a floor
+// (it can only under-count); the previous behaviour — treating the missing
+// baseline as 0 — reported the counter's LIFETIME total as if it were the
+// window's usage, so a 24h or 7d view on a 1h-retention store read far too
+// high. Callers pair this with storeCoverage() to say what was really covered.
 export function counterDelta(db, metric, labelsFilter, from, to) {
   let total = 0;
   for (const labelsKey of distinctSeriesInWindow(db, metric, from, to)) {
     const obj = JSON.parse(labelsKey);
     if (!labelsMatch(obj, labelsFilter)) continue;
     const end = latestAt(db, metric, labelsKey, to);
-    const start = latestAt(db, metric, labelsKey, from);
     if (end == null) continue;
-    const base = start == null ? 0 : start;
+    const start = latestAt(db, metric, labelsKey, from);
+    const base = start == null ? earliestInWindow(db, metric, labelsKey, from, to) : start;
+    if (base == null) continue;
     const d = end - base;
     total += d > 0 ? d : 0;
   }
@@ -185,15 +217,38 @@ export function counterBreakdown(db, metric, groupLabel, from, to, extraFilter =
     const obj = JSON.parse(labelsKey);
     if (!labelsMatch(obj, extraFilter)) continue;
     const end = latestAt(db, metric, labelsKey, to);
-    const start = latestAt(db, metric, labelsKey, from);
     if (end == null) continue;
-    const base = start == null ? 0 : start;
+    const start = latestAt(db, metric, labelsKey, from);
+    const base = start == null ? earliestInWindow(db, metric, labelsKey, from, to) : start;
+    if (base == null) continue;
     const d = end - base;
     if (d < 0) continue;
     const key = obj[groupLabel] ?? 'unknown';
     map.set(key, (map.get(key) ?? 0) + d);
   }
   return [...map.entries()].map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
+}
+
+// Every gauge series for a metric, newest sample per label set. `latestGauge`
+// collapses to one value and is therefore useless for a per-label gauge family
+// such as the budget/credit gauges, which are labelled by api_key/team/member.
+export function latestGaugesByLabel(db, metric, extraFilter = {}) {
+  const rows = db
+    .prepare(
+      `SELECT s.labels AS labels, s.value AS value, s.ts AS ts
+         FROM samples s
+         JOIN (SELECT labels, MAX(ts) AS mts FROM samples WHERE metric = ? GROUP BY labels) m
+           ON m.labels = s.labels AND m.mts = s.ts
+        WHERE s.metric = ?`,
+    )
+    .all(metric, metric);
+  const out = [];
+  for (const r of rows) {
+    const labels = JSON.parse(r.labels);
+    if (!labelsMatch(labels, extraFilter)) continue;
+    out.push({ labels, value: r.value, ts: r.ts });
+  }
+  return out;
 }
 
 export function latestGauge(db, metric, labelsFilter) {

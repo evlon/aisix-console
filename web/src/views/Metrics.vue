@@ -55,7 +55,8 @@ async function loadAll() {
     const [ov, sm, tr] = await Promise.all([
       api.metricsOverview(),
       api.metricsSummary(range.value),
-      api.metricsTrend(range.value, 'requests,tokens_in,tokens_out,spend,latency_p50,latency_p95'),
+      // The server caps the series list at 8.
+      api.metricsTrend(range.value, 'requests,tokens,tokens_in,tokens_out,cache_read,spend,latency_p50,latency_p95'),
     ]);
     overview.value = ov;
     summary.value = sm;
@@ -128,6 +129,9 @@ const tokensOption = computed(() => ({
   series: [
     lineSeries(t('metrics.kpi.inputTokens'), trends.value.tokens_in, GREEN, true),
     lineSeries(t('metrics.kpi.outputTokens'), trends.value.tokens_out, AMBER, true),
+    // Cache-read counters are separate from input upstream, so they get their
+    // own line rather than being folded in.
+    lineSeries(t('metrics.kpi.cacheReadTokens'), trends.value.cache_read, MUTED, false),
   ],
 }));
 
@@ -165,6 +169,8 @@ const kpis = computed(() => {
     { label: t('metrics.kpi.inputTokens'), value: fmtNum(x.inputTokens) },
     { label: t('metrics.kpi.outputTokens'), value: fmtNum(x.outputTokens) },
     { label: t('metrics.kpi.totalTokens'), value: fmtNum(x.totalTokens) },
+    { label: t('metrics.kpi.avgTokensPerRequest'), value: fmtNum(x.avgTokensPerRequest) },
+    { label: t('metrics.kpi.cacheReadTokens'), value: fmtNum(x.cacheReadTokens) },
     { label: t('metrics.kpi.spend'), value: fmtUsd(x.spendUsd) },
     { label: t('metrics.kpi.avgLatency'), value: fmtMs(x.avgLatencyMs) },
     { label: t('metrics.kpi.p95Latency'), value: fmtMs(x.p95LatencyMs) },
@@ -172,6 +178,15 @@ const kpis = computed(() => {
     { label: t('metrics.kpi.inFlight'), value: fmtNum(x.inFlight) },
     { label: t('metrics.kpi.ratelimit'), value: fmtNum(x.ratelimitRejections) },
   ];
+});
+
+// A window that starts before anything the store holds yields a floor, not a
+// total. Say so, instead of presenting the number as if it were complete.
+const coverage = computed(() => summary.value?.coverage || null);
+const coverageNote = computed(() => {
+  const c = coverage.value;
+  if (!c?.partial || !c.earliestSampleAt) return null;
+  return t('metrics.coveragePartial', { from: fmtTs(c.earliestSampleAt) });
 });
 
 let timer = null;
@@ -230,6 +245,7 @@ onBeforeUnmount(stopPolling);
       · {{ t('metrics.retention') }}：{{ overview.retentionHours }}
     </div>
     <div v-if="error" class="error-box">{{ error }}</div>
+    <div v-if="coverageNote" class="warn-box">{{ coverageNote }}</div>
 
     <div v-if="!hasData && !loading && !error" class="warn-box">{{ t('metrics.noData') }}</div>
 
@@ -269,7 +285,10 @@ onBeforeUnmount(stopPolling);
           <tr>
             <th>{{ t('metrics.colModel') }}</th>
             <th>{{ t('metrics.colRequests') }}</th>
+            <th>{{ t('metrics.colInputTokens') }}</th>
+            <th>{{ t('metrics.colOutputTokens') }}</th>
             <th>{{ t('metrics.colTokens') }}</th>
+            <th>{{ t('metrics.colAvgTokens') }}</th>
             <th>{{ t('metrics.colSpend') }}</th>
             <th>{{ t('metrics.colP95') }}</th>
           </tr>
@@ -278,7 +297,10 @@ onBeforeUnmount(stopPolling);
           <tr v-for="m in summary.byModel" :key="m.model">
             <td>{{ m.model }}</td>
             <td>{{ fmtNum(m.requests) }}</td>
+            <td>{{ fmtNum(m.inputTokens) }}</td>
+            <td>{{ fmtNum(m.outputTokens) }}</td>
             <td>{{ fmtNum(m.tokens) }}</td>
+            <td>{{ fmtNum(m.avgTokensPerRequest) }}</td>
             <td>{{ fmtUsd(m.spendUsd) }}</td>
             <td>{{ fmtMs(m.p95LatencyMs) }}</td>
           </tr>
@@ -294,7 +316,10 @@ onBeforeUnmount(stopPolling);
           <tr>
             <th>{{ t('metrics.colKey') }}</th>
             <th>{{ t('metrics.colRequests') }}</th>
+            <th>{{ t('metrics.colInputTokens') }}</th>
+            <th>{{ t('metrics.colOutputTokens') }}</th>
             <th>{{ t('metrics.colTokens') }}</th>
+            <th>{{ t('metrics.colAvgTokens') }}</th>
             <th>{{ t('metrics.colSpend') }}</th>
           </tr>
         </thead>
@@ -302,11 +327,85 @@ onBeforeUnmount(stopPolling);
           <tr v-for="k in summary.byKey" :key="k.api_key_id">
             <td>{{ k.api_key_id }}</td>
             <td>{{ fmtNum(k.requests) }}</td>
+            <td>{{ fmtNum(k.inputTokens) }}</td>
+            <td>{{ fmtNum(k.outputTokens) }}</td>
             <td>{{ fmtNum(k.tokens) }}</td>
+            <td>{{ fmtNum(k.avgTokensPerRequest) }}</td>
             <td>{{ fmtUsd(k.spendUsd) }}</td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- by client type -->
+    <div v-if="hasData && summary.byClient?.length" class="card">
+      <h3 style="margin-top: 0">{{ t('metrics.byClient') }}</h3>
+      <p class="muted" style="margin-top: -6px; font-size: 12px">{{ t('metrics.byClientHint') }}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t('metrics.colClient') }}</th>
+            <th>{{ t('metrics.colInputTokens') }}</th>
+            <th>{{ t('metrics.colOutputTokens') }}</th>
+            <th>{{ t('metrics.colTokens') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in summary.byClient" :key="c.client_type">
+            <td>{{ c.client_type }}</td>
+            <td>{{ fmtNum(c.inputTokens) }}</td>
+            <td>{{ fmtNum(c.outputTokens) }}</td>
+            <td>{{ fmtNum(c.tokens) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- budgets / credits -->
+    <div v-if="hasData && (summary.budgets?.length || summary.ratelimitRemainingTokens?.length)" class="card">
+      <h3 style="margin-top: 0">{{ t('metrics.budgets') }}</h3>
+      <p class="muted" style="margin-top: -6px; font-size: 12px">{{ t('metrics.budgetsHint') }}</p>
+      <table v-if="summary.budgets?.length">
+        <thead>
+          <tr>
+            <th>{{ t('metrics.colBudgetTarget') }}</th>
+            <th>{{ t('metrics.colLimit') }}</th>
+            <th>{{ t('metrics.colSpent') }}</th>
+            <th>{{ t('metrics.colRemaining') }}</th>
+            <th>{{ t('metrics.colResetsIn') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="b in summary.budgets" :key="b.api_key_id || b.team_id || b.user_id">
+            <td>{{ b.name || b.api_key_id || b.team_id || b.user_id || '—' }}</td>
+            <td>{{ fmtUsd(b.limitUsd) }}</td>
+            <td>{{ fmtUsd(b.spentUsd) }}</td>
+            <td :style="b.remainingUsd != null && b.remainingUsd <= 0 ? 'color: var(--red)' : ''">
+              {{ fmtUsd(b.remainingUsd) }}
+            </td>
+            <td>{{ b.resetSeconds == null ? '—' : Math.round(b.resetSeconds) + 's' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="summary.ratelimitRemainingTokens?.length" style="margin-top: 12px">
+        <div class="muted" style="font-size: 12px; margin-bottom: 4px">{{ t('metrics.ratelimitTokens') }}</div>
+        <table>
+          <thead>
+            <tr>
+              <th>{{ t('metrics.colKey') }}</th>
+              <th>{{ t('metrics.colModel') }}</th>
+              <th>{{ t('metrics.colRemainingTokens') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(r, i) in summary.ratelimitRemainingTokens" :key="i">
+              <td>{{ r.api_key_id || '—' }}</td>
+              <td>{{ r.model || '—' }}</td>
+              <td>{{ fmtNum(r.remaining) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>

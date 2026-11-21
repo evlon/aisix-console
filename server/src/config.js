@@ -24,10 +24,11 @@ const DEFAULTS = {
   reloadCommand: '',
   metricsDb: path.join(PROJECT_ROOT, 'data', 'metrics.db'),
   metricsScrapeIntervalSeconds: 10,
-  // Default retention is 1 hour so the console never eats memory/disk on a
-  // long-running box just to keep history. Operators who want a longer window
-  // must set it explicitly (config or CONSOLE_METRICS_RETENTION_HOURS).
-  metricsRetentionHours: 1,
+  // 24h by default. It must cover the ranges the UI offers (15m/1h/6h/24h):
+  // with the previous 1h default, a 24h or 7d selection could only ever show
+  // the last hour, and — because the window's baseline had been pruned — it
+  // reported the counter's lifetime total as if it were that window's usage.
+  metricsRetentionHours: 24,
 };
 
 function deepMerge(base, override) {

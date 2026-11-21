@@ -53,6 +53,10 @@ COPY --from=web-build /build/web/dist ./web/dist
 # CONSOLE_* prefix (NOT AISIX_*): the aisix gateway in the same container
 # treats every AISIX_* env var as a config override.
 ENV CONSOLE_CONFIG=/etc/aisix/aisix-console.yaml
+# Keep the usage store on the mounted data dir. Without this it defaults to
+# /app/data/metrics.db inside the container's writable layer, so every recreate
+# (every upgrade) silently discards the whole usage history.
+ENV CONSOLE_METRICS_DB=/etc/aisix/metrics.db
 EXPOSE 3000 3002 9090 8787
 
 # Liveness probe for the console. The console is the part that can wedge (it

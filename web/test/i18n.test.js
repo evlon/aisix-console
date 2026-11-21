@@ -25,11 +25,12 @@ const FILES = [
   '../src/components/ExporterHealth.vue',
   '../src/components/FormatBanner.vue',
   '../src/views/Resources.vue',
+  '../src/views/Metrics.vue',
 ];
 
 // Only the blocks this suite owns; other pages' keys are exercised by their own
 // usage and would just duplicate the check.
-const OWNED_PREFIXES = ['obs.', 'fmt.', 'resources.'];
+const OWNED_PREFIXES = ['obs.', 'fmt.', 'resources.', 'metrics.'];
 
 const locales = { 'zh-CN': zh, en };
 
@@ -142,7 +143,7 @@ test('both locales define the same obs.* / fmt.* key set', () => {
     }
     return out;
   };
-  for (const block of ['obs', 'fmt', 'resources']) {
+  for (const block of ['obs', 'fmt', 'resources', 'metrics']) {
     const zhKeys = flatten(zh[block]).sort();
     const enKeys = flatten(en[block]).sort();
     const onlyZh = zhKeys.filter((k) => !enKeys.includes(k));
