@@ -95,6 +95,10 @@ docker compose -f deploy/docker-compose.yml up -d
 - Data dir (mounted at `/etc/aisix`): `config.yaml`, `resources.yaml`,
   `aisix-console.yaml`, `auth.json`, `secrets.env` — survives container
   recreates.
+- **The admin port here is 3002, not upstream's default 3001** — `deploy/config.yaml`
+  sets it and `docker-compose.yml` maps it. Whatever you choose, the console's
+  `gateway.admin` must point at the port the gateway actually binds, or the
+  status page's `/admin/v1/health` readout goes blank.
 
 ## Hot reload & updates
 
@@ -213,6 +217,21 @@ WARN aisix: <NAME> was not applied as a configuration override: it names no
 ```
 
 That last clause is the answer: interpolation is a resources-file feature only.
+
+**Upstream's own example invites this mistake.** `config.example.yaml` says:
+
+```yaml
+admin:
+  addr: "127.0.0.1:3001"
+  admin_keys:
+    # Provide via env to avoid committing secrets.
+    # - "${AISIX_ADMIN_KEY}"
+    - "admin-local-only-change-me"
+```
+
+Uncommenting that line — the comment recommends exactly that — silently produces a
+20-character literal as the admin key. The env form is right; the `${...}`
+spelling is not, and only the resources file accepts it.
 
 ### A placeholder and a real value look identical
 

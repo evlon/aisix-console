@@ -89,6 +89,9 @@ docker compose -f deploy/docker-compose.yml up -d
 - 网关：代理 `:3000`、admin `:3002`、metrics `:9090`
 - 数据目录（挂载到 `/etc/aisix`）：`config.yaml`、`resources.yaml`、`aisix-console.yaml`、
   `auth.json`、`secrets.env` —— 容器重建后保留。
+- **这里的 admin 端口是 3002，不是上游默认的 3001** —— 由 `deploy/config.yaml` 设定、
+  `docker-compose.yml` 映射。无论你选哪个，控制台的 `gateway.admin` 都必须指向网关**实际**
+  绑定的端口，否则状态页的 `/admin/v1/health` 读数会变空。
 
 ## 热重载与更新
 
@@ -196,6 +199,20 @@ WARN aisix: <NAME> was not applied as a configuration override: it names no
 ```
 
 最后半句就是答案：**插值是资源文件独有的能力**。
+
+**上游自己的示例就在诱导这个错误。** `config.example.yaml` 里写的是：
+
+```yaml
+admin:
+  addr: "127.0.0.1:3001"
+  admin_keys:
+    # Provide via env to avoid committing secrets.
+    # - "${AISIX_ADMIN_KEY}"
+    - "admin-local-only-change-me"
+```
+
+把那行取消注释 —— 而注释推荐的正是这个做法 —— 就会静默地得到一个 20 字符的**字面量**
+管理密钥。「用环境变量」这个建议是对的，`${...}` 这个写法是错的，而且只有资源文件接受它。
 
 ### 占位符和真值长得一模一样
 
