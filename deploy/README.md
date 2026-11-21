@@ -192,10 +192,52 @@ admin:
     - "${AISIX_ADMIN_KEY}"
 ```
 
-Put the real value in `config.yaml` (and restrict it: `chown` to the container
-user, `chmod 600`), or override through the environment-variable mechanism the
-config loader does support for individual fields. A resources-file reference is
-the only place `${VAR}` means "read from the environment".
+The gateway does warn about the underlying confusion, in wording worth knowing
+(`crates/aisix-core/src/config.rs`):
+
+```
+WARN aisix: <NAME> was not applied as a configuration override: it names no
+  gateway setting, and a nested setting is spelled AISIX_<SECTION>__<KEY>.
+  If the configuration reads it by name (etcd.password_env, a resources-file
+  interpolation) it still applies; otherwise nothing reads it
+```
+
+That last clause is the answer: interpolation is a resources-file feature only.
+
+### The env override that does work, and its two traps
+
+For a normal field the loader layers `AISIX_<SECTION>__<KEY>` on top of the
+YAML. Scalar list fields are set with **commas**, not JSON — `admin.admin_keys`
+is one of the registered list keys. Measured against
+`ghcr.io/api7/aisix:1.11.0` with a config that has **no** `admin_keys` at all:
+
+| env value | result |
+|---|---|
+| `probe-key-123` | gateway starts; `Bearer probe-key-123` → **200** |
+| `["probe-key-456"]` | gateway starts, but the key is the **literal** `["probe-key-456"]` — the real key gets 401, and only the bracketed string authenticates |
+| `__0=probe-key-789` (i.e. `AISIX_ADMIN__ADMIN_KEYS__0`) | gateway **fails to start**: `admin.admin_keys: invalid type: map, expected a sequence` |
+
+`__` is the nesting separator, so the indexed form turns the list into a map and
+the deserializer rejects it outright. Use `AISIX_ADMIN__ADMIN_KEYS=k1,k2`.
+
+An env var is also more exposed than a file: anything that can inspect the
+container or read `/proc/<pid>/environ` can read it, whereas a `chmod 600`
+file is limited to root and the container user. Pick per your threat model.
+
+### …but not in this image
+
+`docker/entrypoint.sh` deliberately **unsets every `AISIX_*` variable** before
+starting the gateway, so that a stray `AISIX_*` (or this image's own `CONSOLE_*`
+neighbours) cannot be reinterpreted as a gateway config override:
+
+```sh
+unset $(env | sed -n 's/^\(AISIX_[A-Z0-9_]*\)=.*/\1/p')
+```
+
+Consequence: in the single-container image the gateway's configuration must come
+from `config.yaml` — the `AISIX_*` channel is closed by design. In a split
+deployment running the **official** image, `AISIX_*` works, and it has to be set
+on the **gateway** container, not the console one.
 
 The console's own settings do not have this trap: `adminKey` in
 `aisix-console.yaml` is read as a literal, and every `${VAR}` the docs mention
