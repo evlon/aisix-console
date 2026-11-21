@@ -133,6 +133,74 @@ pointing a v1 file at a 1.11+ gateway — a mismatch fails the whole load, not o
 row. The console shows a banner with a one-click migration, and
 `node server/scripts/migrate-resources-v2.mjs` does the same thing offline.
 
+## Running the console without the gateway (split deployment)
+
+This image is a **two-process supervisor**: `docker/entrypoint.sh` starts the
+gateway AND the console in one container, and the reload helper
+(`docker/gw-hup.sh`) finds the gateway by scanning the container's own `/proc`
+for a process named `aisix`. Two consequences when the gateway runs elsewhere
+(e.g. the official `ghcr.io/api7/aisix` image in its own container):
+
+1. **`reloadCommand` must be replaced.** The default `sh /usr/local/bin/gw-hup.sh`
+   finds no gateway and exits 1; the console reports the save as done with a
+   reload warning. SIGHUP is the only reload trigger — the admin listener has no
+   reload route (every `/admin/v1/*` route is a GET and resource management is
+   read-only), and the resources file has no watch — so a split deployment has to
+   deliver the signal itself:
+
+   ```yaml
+   # console's aisix-console.yaml — pick one
+   reloadCommand: "docker kill -s HUP aisix"      # needs the docker CLI in the image
+   reloadCommand: "node /usr/local/bin/hup-remote.js"   # no CLI needed; node is already there
+   ```
+
+   Or give the console container the gateway's PID namespace
+   (`--pid=container:aisix`) and leave the default alone. That couples their
+   lifetimes.
+
+2. **Do not run the console-only container from this image unmodified.** Its
+   entrypoint will start a *second* gateway inside the console container (its own
+   network namespace, so the ports bind fine). `gw-hup.sh` then finds a process
+   named `aisix` — the wrong one — sends SIGHUP to it, exits 0, and the console
+   reports a successful reload while the real gateway never reloads. That is a
+   genuinely silent failure. Run the console alone instead:
+
+   ```yaml
+   services:
+     console:
+       image: ghcr.io/evlon/aisix-console:latest
+       entrypoint: ["node", "/app/server/index.js"]   # skip the supervisor
+       environment:
+         - CONSOLE_CONFIG=/etc/aisix/aisix-console.yaml
+       volumes:
+         - /root/aisix-data:/etc/aisix
+   ```
+
+   (Contributions welcome: a `CONSOLE_ONLY=1` switch in the entrypoint, or a
+   console-only image target, would make this a one-line change.)
+
+## `config.yaml` does not interpolate `${VAR}`
+
+Only the **resources file** goes through `${VAR}` interpolation — that lives in
+the file channel (`aisix-etcd/src/file_source/yaml.rs`), not the config loader.
+So this silently yields a 20-character literal as the admin key:
+
+```yaml
+# config.yaml — WRONG
+admin:
+  admin_keys:
+    - "${AISIX_ADMIN_KEY}"
+```
+
+Put the real value in `config.yaml` (and restrict it: `chown` to the container
+user, `chmod 600`), or override through the environment-variable mechanism the
+config loader does support for individual fields. A resources-file reference is
+the only place `${VAR}` means "read from the environment".
+
+The console's own settings do not have this trap: `adminKey` in
+`aisix-console.yaml` is read as a literal, and every `${VAR}` the docs mention
+refers to `resources.yaml`.
+
 ## Observability exporter credentials
 
 This compose file does **not** declare an `env_file`, and the data dir's

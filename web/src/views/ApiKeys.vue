@@ -441,7 +441,7 @@ onMounted(load);
           <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
         </div>
         <div v-if="lastResult && lastResult.ok && !generatedPlaintext" class="badge ok" style="margin-top: 10px">
-          {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + t('save.reloadWarning') : '' }}
+          {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}
         </div>
       </template>
     </Modal>
