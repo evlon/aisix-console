@@ -1,0 +1,25 @@
+# Keep LF where it is load-bearing.
+#
+# A CRLF shell script has a broken shebang — the kernel looks for the
+# interpreter "/bin/bash\r" and reports "no such file or directory", which reads
+# like a missing file rather than a line-ending problem. That is exactly how the
+# container ended up in a restart loop when its image was built from
+# `git archive` on a Windows checkout (core.autocrlf=true); CI never hit it
+# because GitHub runners are Linux with autocrlf=false.
+#
+# Normalize text in the repository, and check out / archive the executable and
+# config files with LF regardless of the platform.
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.vue text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+
+# The gateway binary is copied into the image by CI; it is not text.
+aisix-bin/** -text
