@@ -180,6 +180,11 @@ jobs:
         with:
           name: aisix-bin
           path: aisix-bin
+        # NOTE: this binary is used ONLY for the schema gate below. It is no
+        # longer shipped in the image — the image takes the gateway from the
+        # official multi-arch image, so an arm64 build gets an arm64 binary
+        # (a prebuilt amd64 artifact copied into an arm64 image would exec-fail,
+        # and the console's save path calls `aisix validate`).
 
       - name: validate gateway resources schema
         # Mirrors the console's own `aisix validate --resources <file>` call
@@ -188,6 +193,23 @@ jobs:
         run: |
           chmod +x aisix-bin/aisix
           ./aisix-bin/aisix validate --resources deploy/resources.ci-sample.yaml
+
+      - name: resolve gateway image
+        id: gwimg
+        # buildx builds each stage for the TARGET platform, so pointing the
+        # Dockerfile at the upstream multi-arch image is what yields a correct
+        # per-architecture gateway binary without cross-compiling.
+        run: |
+          set -euo pipefail
+          track="${{ needs.build-gateway.outputs.track }}"
+          if [ "$track" = "edge" ]; then
+            # Upstream publishes main builds as ci-test-<short-sha>.
+            ref="ghcr.io/api7/aisix:ci-test-${AISIX_VERSION#edge-}"
+          else
+            ref="ghcr.io/api7/aisix:${AISIX_VERSION}"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "::notice::gateway image for this build: $ref"
 
       - name: compute image tag
         id: meta
@@ -213,13 +235,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: build and push
         uses: docker/build-push-action@v6
         with:
           context: .
+          # linux/arm64 matters for 信创 / Kunpeng-class hosts, which are common
+          # enough that an amd64-only console is a deployment blocker there.
+          # The arm64 leg runs `npm ci` under emulation; the deps are pure JS,
+          # so it works, it is just slower.
+          platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
             AISIX_VERSION=${{ env.AISIX_VERSION }}
+            AISIX_GATEWAY_IMAGE=${{ steps.gwimg.outputs.ref }}
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: summarize build

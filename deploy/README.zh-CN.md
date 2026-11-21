@@ -27,15 +27,22 @@ English: [README.md](README.md)
 每个镜像都带一个 `aisix.version` OCI 标签，记录网关构建版本
 （`docker inspect --format '{{.Config.Labels}}' <image>`）。
 
-**本地构建**：先把一个 Linux 的 `aisix` 二进制放进 `aisix-bin/aisix`（可从官方镜像里取出）：
+**镜像是多架构的：`linux/amd64` 与 `linux/arm64`。** 这对**信创 / 鲲鹏类（aarch64）**
+机器是必需的 —— 只有 amd64 的控制台在那里根本跑不起来，靠模拟跑 Express + SSR 也不现实。
+网关二进制是**按目标平台**从官方多架构镜像里取的（buildx 会为每个目标平台构建 stage）：
+预先存在的二进制不会被多平台构建重编，把 amd64 二进制塞进 arm64 镜像会 exec 失败，
+而且控制台保存配置时会调 `aisix validate`，**连保存都会坏**。可用
+`--build-arg AISIX_GATEWAY_IMAGE=ghcr.io/api7/aisix:<tag>` 换来源。
+
+CI 仍会在 amd64 runner 上编译 `api7/aisix`，但**只用于解析版本和跑 schema 漂移门禁**；
+那份二进制不再进镜像。
+
+**本地构建**（不再需要先把二进制放进 `aisix-bin/` —— Dockerfile 自己从上游镜像取）：
 
 ```bash
-mkdir -p aisix-bin
-podman create ghcr.io/api7/aisix:1.11.0 --name gw-x
-podman cp gw-x:/usr/local/bin/aisix aisix-bin/aisix
-podman rm gw-x
-
-podman build --network=host -t aisix-console:dev .   # --network=host：为了访问 npm 源
+podman build -t aisix-console:dev .
+# 在 arm64 机器上构建 arm64，或用 buildx 出多架构 manifest：
+podman buildx build --platform linux/amd64,linux/arm64 -t aisix-console:dev .
 ```
 
 > 基底镜像必须是 **Debian 13（trixie）**：网关二进制链接的 glibc 比 Debian 12 更新，

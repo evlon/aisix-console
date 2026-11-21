@@ -29,17 +29,28 @@ The gateway binary is built by CI with a **two-track** strategy (see
 > use a concrete tag (`aisix-1.11.0`), not `:latest`.
 
 Every image carries an `aisix.version` OCI label recording the gateway build
-(`docker inspect --format '{{.Config.Labels}}' <image>`). For a local build,
-drop any Linux `aisix` binary into `aisix-bin/aisix` first (e.g. extract it
-from the official image):
+(`docker inspect --format '{{.Config.Labels}}' <image>`).
+
+**The image is multi-arch: `linux/amd64` and `linux/arm64`.** That matters for
+信创 / Kunpeng-class (aarch64) hosts, where an amd64-only console simply cannot
+run — no amount of emulation makes an Express + SSR console pleasant. The
+gateway binary is taken **per target platform** from the official multi-arch
+image (buildx builds each stage for the target platform), because a prebuilt
+binary is not recompiled by a multi-platform build: an amd64 binary copied into
+an arm64 image exec-fails, and the console's save path shells out to
+`aisix validate`, so saving config breaks too. Override the source with
+`--build-arg AISIX_GATEWAY_IMAGE=ghcr.io/api7/aisix:<tag>`.
+
+CI still compiles `api7/aisix` on an amd64 runner — but only to resolve the
+version and to run the schema-drift gate; that binary is no longer shipped.
+
+**Local build** (no binary staging needed — the gateway comes from the upstream
+image in the Dockerfile):
 
 ```bash
-mkdir -p aisix-bin
-podman create ghcr.io/api7/aisix:0.8.1 --name gw-x
-podman cp gw-x:/usr/local/bin/aisix aisix-bin/aisix
-podman rm gw-x
-
-podman build --network=host -t aisix-console:dev .   # --network=host: npm registry
+podman build -t aisix-console:dev .
+# arm64 on an arm64 host, or a multi-arch manifest with buildx:
+podman buildx build --platform linux/amd64,linux/arm64 -t aisix-console:dev .
 ```
 
 ## Run
