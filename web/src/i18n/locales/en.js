@@ -440,4 +440,145 @@ export default {
     unknown: 'unknown',
     loading: 'Loading…',
   },
+  fmt: {
+    v1Title: 'resources.yaml is still format 1',
+    v1Body:
+      'The aisix ≤ 1.10 format — usable as-is. Migrating is mandatory before aisix ≥ 1.11: every row then needs a UUID `id` and references are ids too. The migration keeps the existing ids, so metrics and logs do not break.',
+    migrate: 'Migrate to format 2',
+    migrating: 'Migrating…',
+    migrateConfirm:
+      'Migrate resources.yaml to format 2?\n\nEvery resource gets its UUID `id` (the same ids the gateway derived before), and name references are rewritten as id references.\n\nIf the running gateway binary is older than 1.11, aisix validate rejects it and the file is left untouched.',
+    migrated: 'Migrated to format 2',
+    reloadHint: 'Reload the page so every view re-reads the rows in the new format.',
+    reload: 'Reload',
+  },
+  obs: {
+    step1: '1. Choose a destination',
+    step2: '2. Connection details',
+    step3: '3. Gateway credentials',
+    step4: '4. What gets exported',
+
+    targetGrafana: 'Grafana / Tempo',
+    targetGrafanaDesc: 'OTLP/HTTP into Grafana Cloud or self-hosted Tempo',
+    targetLangfuse: 'Langfuse',
+    targetLangfuseDesc: 'LLM observability platform, over OTLP/HTTP',
+    targetHoneycomb: 'Honeycomb',
+    targetHoneycombDesc: 'OTLP/HTTP intake',
+    targetOtlp: 'Other OTLP/HTTP backend',
+    targetOtlpDesc: 'Jaeger, self-hosted OTel Collector, …',
+    targetDatadog: 'Datadog',
+    targetDatadogDesc: 'Native logs intake (Logs HTTP intake)',
+    targetSls: 'Alibaba Cloud SLS',
+    targetSlsDesc: 'Log Service PutLogs',
+    targetObjectStore: 'Object storage archive',
+    targetObjectStoreDesc: 'S3 / GCS / Azure Blob, NDJSON partitioned by hour',
+
+    fieldName: 'Name',
+    fieldNamePlaceholder: 'e.g. grafana-prod',
+    fieldEnabled: 'Enabled',
+    fieldEnabledHelp: 'When disabled, no telemetry is sent to this destination; the config is kept.',
+
+    fieldEndpoint: 'Endpoint',
+    endpointHelpOtlp:
+      'Must include the full receiver path, usually /v1/traces. Only https:// is accepted — http:// is allowed just for the hostnames mock-otlp / otel-collector / 127.0.0.1 / localhost, so a self-hosted collector named anything else (e.g. tempo) must use https.',
+    fieldHeaders: 'Headers (one Key: Value per line)',
+    headersHelp:
+      'Authentication usually goes here. Note: headers are stored in resources.yaml in PLAINTEXT — keep that file out of public repos.',
+    fieldSampleRate: 'Sample rate (0–1)',
+    sampleRateHelp: 'Leave empty or set 1 to export every request.',
+
+    fieldSite: 'Datadog site',
+    siteHelp: 'Must be one of the sites in the list.',
+    fieldService: 'service',
+    serviceHelp: 'Reserved Datadog attribute; logs are grouped by it in Log Explorer.',
+    fieldDdsource: 'ddsource',
+    fieldTags: 'Tags (comma-separated)',
+    tagsHelp: 'For example team:platform, tier:prod. Rendered into Datadog ddtags.',
+
+    fieldSlsEndpoint: 'SLS regional endpoint (host only)',
+    slsEndpointHelp:
+      'No https:// — for example ap-southeast-3.log.aliyuncs.com. Pasting a scheme is rejected by the gateway.',
+    fieldProject: 'SLS project',
+    fieldLogstore: 'SLS logstore',
+
+    fieldProvider: 'Storage provider',
+    fieldBucket: 'Bucket / container',
+    fieldPrefix: 'Key prefix',
+    prefixHelp: 'The full key is <prefix>/org=…/env=…/table=…/dt=…/hh=…/<file>.',
+    fieldRegion: 'Region',
+    regionHelp: 'Set for S3 buckets outside us-east-1. Ignored for GCS and Azure.',
+    fieldObjEndpoint: 'Custom endpoint (optional)',
+    objEndpointHelp:
+      'Only needed for S3-compatible stores (MinIO / Alibaba OSS / Cloudflare R2). Only https:// is accepted — http:// is allowed just for minio / azurite / fake-gcs-server / fake-gcs / 127.0.0.1 / localhost.',
+    fieldCompression: 'Compression',
+    fieldAuthMode: 'Authentication',
+    authModeCredentialRef: 'Static keys from environment variables',
+    authModeCloudIdentity: 'Host cloud identity (S3 / GCS only)',
+
+    destPreview: 'This exporter sends to',
+
+    credIntro:
+      'This name is NOT a secret — it is a reference name. At delivery time the gateway uses it to look up the real secret in its own process environment, and the name decides which variables it looks for.',
+    credRefLabel: 'Credential reference (credential_ref)',
+    credRefHelp:
+      'Pick a name of your own, e.g. sls-prod. Never paste the secret itself here: it would be treated as a reference name and never resolve.',
+    credVarName: 'Environment variable',
+    credVarFor: 'Used for',
+    credOptional: 'optional',
+    credSet: 'Set',
+    credNotSet: 'Not set',
+    credAllSet: 'Gateway credentials are in place; delivery will pick them up.',
+    credMissing: 'Some variables are unset — the gateway will still try to deliver, and fail.',
+    credEnvScope:
+      '"Set / not set" reads the CONSOLE process environment. In the single-container deployment the console and gateway share the container environment, so the answer matches; in a split deployment trust the gateway process instead.',
+    credSnippets: 'How to inject them',
+    credCompose: 'docker-compose',
+    credDockerRun: 'docker run',
+    credDotenv: 'env file',
+    credNoVars: 'This destination needs no environment variables.',
+
+    contentMode: 'Exported content',
+    contentMetadata: 'Metadata only (recommended)',
+    contentFull: 'Include prompts and responses',
+    contentHelp:
+      'Metadata only exports token counts, model, status and timings — not the prompt or response text. Token statistics do not need content, so the default is enough. This is the switch that ships content to a third party.',
+    contentMaxBytes: 'Max bytes per field',
+    contentMaxBytesHelp: 'Only applies when content is included. Range 1–1048576.',
+    useDefault: 'Use default (128 KiB)',
+
+    healthTitle: 'Delivery health',
+    healthSubtitle: 'Whether telemetry is actually leaving the gateway',
+    healthNoStore:
+      'Usage store not ready: the gateway metrics endpoint is unreachable, or metrics are disabled. Delivery health cannot be judged yet.',
+    healthScrapeFailed: 'The last scrape of the gateway /metrics failed; the numbers below may be stale.',
+    healthEmitted: 'Events emitted',
+    healthDrops: 'Events dropped',
+    healthDropRate: 'Drop rate',
+    healthLastScrape: 'Last scrape',
+    healthFailures: 'Delivery failures',
+    healthDropsByReason: 'Drop reasons',
+    colDestination: 'Sends to',
+    colContent: 'Exported content',
+    colExporter: 'Exporter',
+    healthNoPerExporterRows: 'No per-exporter failures in this window.',
+    healthGlobalOnly:
+      'This gateway version exposes only gateway-wide emit/drop counters — there is no per-exporter attribution — so only the overall numbers are available here. A rising drop rate means some exporter is failing or being dropped; check the gateway log for the exporter name.',
+
+    err: {
+      required: 'Required',
+      otlpHttpNeedsHttps:
+        'Must be https:// (http:// is allowed only for mock-otlp / otel-collector / 127.0.0.1 / localhost)',
+      otlpBadUrl: 'Enter a full URL, e.g. https://host/v1/traces',
+      slsHostOnly: 'Host only — do not include https://',
+      slsBadHost: 'Expected something like ap-southeast-3.log.aliyuncs.com',
+      ddBadSite: 'Must be one of the listed Datadog sites',
+      objStoreHttpNeedsHttps:
+        'Must be https:// (http:// is allowed only for minio / azurite / fake-gcs-server / 127.0.0.1 / localhost)',
+      badInt: 'Enter an integer',
+      outOfRange: 'Out of the allowed range',
+      badNumber: 'Enter a number',
+      tooLong120: 'Must be at most 120 characters',
+      cloudIdentityS3GcsOnly: 'Cloud identity supports S3 / GCS only — use a credential reference for Azure Blob',
+    },
+  },
 };

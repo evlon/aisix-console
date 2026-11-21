@@ -13,6 +13,7 @@ import { resourcesRouter } from './src/routes/resources.js';
 import { statusRouter, secretsRouter, miscRouter } from './src/routes/status.js';
 import { playgroundRouter } from './src/routes/playground.js';
 import { metricsRouter } from './src/routes/metrics.js';
+import { exportersRouter } from './src/routes/exporters.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,6 +65,7 @@ function buildApp(cfg) {
   app.use('/api/secrets', secretsRouter(ctx));
   app.use('/api/playground', playgroundRouter(ctx));
   app.use('/api/metrics', metricsRouter(ctx));
+  app.use('/api/exporters', exportersRouter(ctx));
   app.use('/api', miscRouter(ctx));
 
   // Serve the built SPA (web/dist) in production; dev uses the Vite proxy.

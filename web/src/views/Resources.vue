@@ -4,6 +4,16 @@ import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
+import ExporterForm from '../components/ExporterForm.vue';
+import ExporterHealth from '../components/ExporterHealth.vue';
+import {
+  defaultDraft as defaultExporterDraft,
+  draftFromEntry as draftFromExporterEntry,
+  buildEntry as buildExporterEntry,
+  validateDraft as validateExporterDraft,
+  destinationOf,
+  contentModeOf,
+} from '../lib/exporterTargets.js';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 const { t } = useI18n();
@@ -99,13 +109,7 @@ function emptyEntry() {
     };
   }
   if (k === 'observability_exporters') {
-    return {
-      name: '', enabled: true, kind: 'otlp_http',
-      endpoint: '', headers_text: '{}', sample_rate: '', content_mode: 'metadata_only', content_max_bytes: '',
-      project: '', logstore: '', credential_ref: '',
-      provider: 's3', bucket: '', prefix: '', region: '', compression: 'gzip', auth_mode: 'credential_ref',
-      site: '', service: '', ddsource: '', tags_text: '{}',
-    };
+    return defaultExporterDraft('otlp_http');
   }
   if (k === 'guardrail_attachments') {
     return {
@@ -190,8 +194,13 @@ function openEdit(e) {
     f.hmac_secret = e.hmac_secret ?? '';
   }
   if (k === 'observability_exporters') {
-    f.headers_text = e.headers ? JSON.stringify(e.headers, null, 2) : '{}';
-    f.tags_text = e.tags ? JSON.stringify(e.tags, null, 2) : '{}';
+    // The exporter draft is a different shape from the stored entry (header and
+    // tag text, content-cap defaults), so build it rather than patching `f`.
+    form.value = draftFromExporterEntry(e, e.kind || 'otlp_http');
+    lastResult.value = null;
+    tab.value = 'form';
+    rawText.value = stringifyYaml(e, { lineWidth: 0 });
+    return;
   }
   if (k === 'claim_mappings') {
     f.match = e.match?.length ? e.match.map((m) => ({
@@ -300,47 +309,11 @@ function buildEntry() {
   }
 
   if (k === 'observability_exporters') {
-    const base = { name: f.name, enabled: !!f.enabled, kind: f.kind };
-    let cfg = {};
-    if (f.kind === 'otlp_http') {
-      cfg = clean({
-        endpoint: f.endpoint,
-        headers: parseJsonObj(f.headers_text, 'headers'),
-        sample_rate: f.sample_rate !== '' ? Number(f.sample_rate) : undefined,
-        content_mode: f.content_mode,
-        content_max_bytes: f.content_max_bytes !== '' ? Number(f.content_max_bytes) : undefined,
-      });
-    } else if (f.kind === 'aliyun_sls') {
-      cfg = clean({
-        endpoint: f.endpoint,
-        project: f.project,
-        logstore: f.logstore,
-        credential_ref: f.credential_ref,
-        content_mode: f.content_mode,
-        content_max_bytes: f.content_max_bytes !== '' ? Number(f.content_max_bytes) : undefined,
-      });
-    } else if (f.kind === 'object_store') {
-      cfg = clean({
-        provider: f.provider,
-        bucket: f.bucket,
-        prefix: f.prefix,
-        region: f.region,
-        endpoint: f.endpoint,
-        compression: f.compression,
-        auth_mode: f.auth_mode,
-        credential_ref: f.credential_ref,
-      });
-    } else if (f.kind === 'datadog') {
-      cfg = clean({
-        site: f.site,
-        credential_ref: f.credential_ref,
-        service: f.service,
-        ddsource: f.ddsource,
-        tags: parseJsonObj(f.tags_text, 'tags'),
-        content_mode: f.content_mode,
-      });
-    }
-    return { ...base, ...cfg };
+    // Delegated to the shared mapper so the form, the tests, and the list's
+    // "destination" column all agree on what gets written. It emits only the
+    // fields of the selected kind, because each inner config is
+    // `deny_unknown_fields` on the gateway side.
+    return buildExporterEntry(f);
   }
 
   if (k === 'guardrail_attachments') {
@@ -478,6 +451,20 @@ async function save() {
     lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
+  // Block the save with the same rules the gateway's schema enforces, so the
+  // user sees "endpoint 必须是 https" here instead of a JSON-pointer error
+  // coming back from `aisix validate`.
+  if (k === 'observability_exporters') {
+    const errs = validateExporterDraft(form.value);
+    const fields = Object.keys(errs);
+    if (fields.length) {
+      lastResult.value = {
+        ok: false,
+        errors: fields.map((field) => ({ message: `${field}: ${t('obs.err.' + errs[field])}` })),
+      };
+      return;
+    }
+  }
   let entry;
   try {
     entry = buildEntry();
@@ -548,17 +535,35 @@ function tableCols() {
   if (k === 'mcp_servers') return ['name', 'type', 'url', 'auth_type', 'enabled'];
   if (k === 'a2a_agents') return ['name', 'url', 'protocol_version', 'auth_type', 'enabled'];
   if (k === 'oidc_providers') return ['name', 'issuer', 'identity_claim', 'enabled'];
-  if (k === 'observability_exporters') return ['name', 'kind', 'enabled'];
+  if (k === 'observability_exporters') return ['name', 'destination', 'content', 'enabled'];
   if (k === 'guardrail_attachments') return ['guardrail_id', 'scope_type', 'scope_id', 'priority', 'enabled'];
   if (k === 'passthrough_routes') return ['name', 'path_prefix', 'target_url', 'enabled'];
   if (k === 'mcp_auth_settings') return ['resource_url', 'anonymous'];
   return ['name', 'jwt_provider', 'priority', 'enabled'];
 }
 
+// Column headers. Custom columns used to render their raw field name, which is
+// how a Chinese UI ended up showing "DESTINATION"/"CONTENT".
+const COL_LABELS = {
+  destination: 'obs.colDestination',
+  content: 'obs.colContent',
+};
+function colLabel(c) {
+  if (c === 'display_name' || c === 'name') return t('common.name');
+  if (c === 'enabled' || c === 'anonymous') return t('common.status');
+  if (COL_LABELS[c]) return t(COL_LABELS[c]);
+  return c;
+}
+
 function cell(e, col) {
   if (col === 'enabled') return e.enabled ? t('common.enabled') : t('common.disabled');
   if (col === 'anonymous') return e.anonymous ? t('common.enabled') : t('common.disabled');
   if (col === 'display_name' || col === 'name') return e.display_name ?? e.name ?? '—';
+  // "Where does it send", which the old name/kind/enabled row could not answer.
+  if (col === 'destination') return destinationOf(e) || '—';
+  if (col === 'content') {
+    return contentModeOf(e) === 'full' ? t('obs.contentFull') : t('obs.contentMetadata');
+  }
   return e[col] ?? '—';
 }
 
@@ -582,6 +587,8 @@ onMounted(load);
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
 
+    <ExporterHealth v-if="activeKind === 'observability_exporters'" />
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <h3 style="margin: 0">{{ kindOf(activeKind).label() }}</h3>
@@ -591,7 +598,7 @@ onMounted(load);
       <table style="margin-top: 12px">
         <thead>
           <tr>
-            <th v-for="c in tableCols()" :key="c">{{ c === 'display_name' || c === 'name' ? t('common.name') : c === 'enabled' ? t('common.status') : c }}</th>
+            <th v-for="c in tableCols()" :key="c">{{ colLabel(c) }}</th>
             <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>
@@ -792,132 +799,12 @@ onMounted(load);
           </div>
         </template>
 
-        <!-- observability exporters -->
-        <template v-else-if="activeKind === 'observability_exporters'">
-          <div class="form-row">
-            <label>name *</label>
-            <input v-model="form.name" />
-          </div>
-          <div class="form-row">
-            <label>kind</label>
-            <select v-model="form.kind">
-              <option value="otlp_http">otlp_http</option>
-              <option value="aliyun_sls">aliyun_sls</option>
-              <option value="object_store">object_store</option>
-              <option value="datadog">datadog</option>
-            </select>
-          </div>
-
-          <template v-if="form.kind === 'otlp_http'">
-            <div class="form-row">
-              <label>endpoint *</label>
-              <input v-model="form.endpoint" />
-            </div>
-            <div class="form-row">
-              <label>headers (JSON)</label>
-              <textarea v-model="form.headers_text" rows="3" style="flex: 1" placeholder='{"Authorization":"…"}' />
-            </div>
-          </template>
-
-          <template v-else-if="form.kind === 'aliyun_sls'">
-            <div class="form-row">
-              <label>endpoint *</label>
-              <input v-model="form.endpoint" />
-            </div>
-            <div class="form-row">
-              <label>project *</label>
-              <input v-model="form.project" />
-            </div>
-            <div class="form-row">
-              <label>logstore *</label>
-              <input v-model="form.logstore" />
-            </div>
-          </template>
-
-          <template v-else-if="form.kind === 'object_store'">
-            <div class="form-row">
-              <label>provider</label>
-              <select v-model="form.provider">
-                <option value="s3">s3</option>
-                <option value="gcs">gcs</option>
-                <option value="azure_blob">azure_blob</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>bucket *</label>
-              <input v-model="form.bucket" />
-            </div>
-            <div class="form-row">
-              <label>prefix</label>
-              <input v-model="form.prefix" />
-            </div>
-            <div class="form-row">
-              <label>region</label>
-              <input v-model="form.region" />
-            </div>
-            <div class="form-row">
-              <label>endpoint</label>
-              <input v-model="form.endpoint" />
-            </div>
-            <div class="form-row">
-              <label>compression</label>
-              <select v-model="form.compression">
-                <option value="gzip">gzip</option>
-                <option value="none">none</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <label>auth_mode</label>
-              <select v-model="form.auth_mode">
-                <option value="credential_ref">credential_ref</option>
-                <option value="cloud_identity">cloud_identity</option>
-              </select>
-            </div>
-          </template>
-
-          <template v-else-if="form.kind === 'datadog'">
-            <div class="form-row">
-              <label>site *</label>
-              <input v-model="form.site" placeholder="datadoghq.com / us3.datadoghq.com / …" />
-            </div>
-            <div class="form-row">
-              <label>service</label>
-              <input v-model="form.service" />
-            </div>
-            <div class="form-row">
-              <label>ddsource</label>
-              <input v-model="form.ddsource" />
-            </div>
-            <div class="form-row">
-              <label>tags (JSON)</label>
-              <textarea v-model="form.tags_text" rows="3" style="flex: 1" placeholder='{"env":"prod"}' />
-            </div>
-          </template>
-
-          <div class="form-row" v-if="['aliyun_sls', 'object_store', 'datadog'].includes(form.kind)">
-            <label>credential_ref</label>
-            <input v-model="form.credential_ref" />
-          </div>
-          <div class="form-row" v-if="form.kind === 'otlp_http'">
-            <label>sample_rate</label>
-            <input v-model="form.sample_rate" type="number" placeholder="0-1" />
-          </div>
-          <div class="form-row" v-if="['otlp_http', 'aliyun_sls', 'datadog'].includes(form.kind)">
-            <label>content_mode</label>
-            <select v-model="form.content_mode">
-              <option value="metadata_only">metadata_only</option>
-              <option value="full">full</option>
-            </select>
-          </div>
-          <div class="form-row" v-if="['otlp_http', 'aliyun_sls'].includes(form.kind)">
-            <label>content_max_bytes</label>
-            <input v-model="form.content_max_bytes" type="number" />
-          </div>
-          <div class="form-row">
-            <label>enabled</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
-          </div>
-        </template>
+        <!-- observability exporters: target-oriented form, in its own component -->
+        <ExporterForm
+          v-else-if="activeKind === 'observability_exporters'"
+          :draft="form"
+          :original="editing?.original"
+        />
 
         <!-- guardrail attachments -->
         <template v-else-if="activeKind === 'guardrail_attachments'">

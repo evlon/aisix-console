@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev -w server\" \"npm:dev -w web\"",
     "build": "npm run build -w web",
-    "start": "npm run start -w server"
+    "start": "npm run start -w server",
+    "test": "npm test -w server && npm test -w web"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

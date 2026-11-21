@@ -62,6 +62,10 @@ export const api = {
   saveRaw: (text) => request('/api/resources/raw', { method: 'PUT', body: JSON.stringify({ text }) }),
   bootstrap: () => request('/api/resources/bootstrap', { method: 'POST' }),
 
+  // resources.yaml file-format metadata + the v1 -> v2 migration (aisix >= 1.11)
+  resourcesMeta: () => request('/api/resources/meta'),
+  migrateFormatV2: () => request('/api/resources/migrate-format-v2', { method: 'POST' }),
+
   secrets: () => request('/api/secrets'),
   setSecret: (name, value) => request('/api/secrets', { method: 'POST', body: JSON.stringify({ name, value }) }),
   deleteSecret: (name) => request(`/api/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
@@ -75,4 +79,14 @@ export const api = {
   metricsSummary: (range = '1h') => request(`/api/metrics/summary?range=${encodeURIComponent(range)}`),
   metricsTrend: (range = '1h', series = 'requests') =>
     request(`/api/metrics/trend?range=${encodeURIComponent(range)}&series=${encodeURIComponent(series)}`),
+
+  // observability exporters: gateway-side credential requirements + delivery health
+  exporterCredentialPlan: ({ kind, ref = '', provider = '', authMode = '' }) =>
+    request(
+      `/api/exporters/credential-plan?kind=${encodeURIComponent(kind)}` +
+        `&ref=${encodeURIComponent(ref)}` +
+        `&provider=${encodeURIComponent(provider)}` +
+        `&authMode=${encodeURIComponent(authMode)}`,
+    ),
+  exportersHealth: (range = '1h') => request(`/api/exporters/health?range=${encodeURIComponent(range)}`),
 };
