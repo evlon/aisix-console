@@ -299,6 +299,10 @@ export default {
     chooseKey: 'Select an API key…',
     useRawYaml:
       'This resource type has a complex shape — edit it through the “Raw YAML” tab, which round-trips the entry exactly.',
+    mcpPolicyIdForm:
+      'This policy uses the id form (allow_ids / deny_ids). The gateway reads only the id lists and ignores the name lists, so editing the allow list here has no effect — edit it through Raw YAML, or remove the id lists first.',
+    mcpAllowRequired:
+      'The allow list cannot be empty: an empty list forbids everything at this layer rather than meaning "unrestricted". Use * to allow everything, or Raw YAML if you really mean to forbid all.',
   },
   playground: {
     title: 'Playground',

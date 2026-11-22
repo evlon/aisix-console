@@ -45,7 +45,7 @@ export const KINDS = [
   { key: 'oidc_providers', group: 'identity' },
   { key: 'claim_mappings', group: 'identity' },
   { key: 'mcp_auth_settings', group: 'identity' },
-  { key: 'mcp_policies', group: 'identity', rawOnly: true },
+  { key: 'mcp_policies', group: 'identity' },
 
   // ── govern: what happens to a request once it is allowed in ──
   { key: 'guardrails', group: 'govern', ownPage: '/policies' },
@@ -252,6 +252,11 @@ export const FORM_FIELDS = {
     'anonymousServers', 'anonymousAggregateEntry',
   ],
   claim_mappings: ['name', 'jwt_provider', 'priority', 'match', 'resolveApiKey', 'enabled'],
+  // The name form of an MCP policy. The id form (`allow_ids`/`deny_ids`) is not
+  // modelled: entries are objects, and when either id list is present at all the
+  // name lists are ignored by the gateway — which is why the form warns instead
+  // of silently editing a field nothing reads.
+  mcp_policies: ['scope', 'scope_ref', 'allow', 'deny', 'enabled'],
 
   // The kinds maintained on the Policies page. Listed here in full, including the
   // fields whose labels that page used to keep in its own `policies.*` keys —

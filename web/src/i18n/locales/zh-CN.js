@@ -306,6 +306,10 @@ export default {
     edit: '编辑',
     chooseKey: '选择调用方密钥…',
     useRawYaml: '该资源类型结构较复杂，请用「原始 YAML」标签页编辑（它会原样往返该条目）。',
+    mcpPolicyIdForm:
+      '这条策略用的是 id 形式（allow_ids / deny_ids）。网关只看 id 名单、会忽略名字名单，所以在这里改「允许清单」不会生效 —— 请用「原始 YAML」编辑，或者先把 id 名单删掉。',
+    mcpAllowRequired:
+      '「允许清单」不能为空：留空等于这一层什么都不允许，而不是「不限制」。要放开全部请填 *；确实要禁止全部，请用「原始 YAML」编辑。',
   },
   playground: {
     title: '试玩 / 对话',

@@ -416,6 +416,17 @@ export default {
       },
       mcp_policies: {
         label: 'MCP access policies',
+        field: {
+          allow: 'Allow list',
+          deny: 'Deny list',
+        },
+        fieldHelp: {
+          scope: 'Whether this policy covers the whole environment or one team. A team policy is layered on top of the environment policy, not instead of it.',
+          scope_ref: 'Pick a team. Only keys whose team_id points at it are constrained by this policy.',
+          allow: 'One per line, written "server__tool", e.g. github__search. A single * means everything. Note allow is required: leaving it empty forbids everything at this layer rather than meaning "unrestricted".',
+          deny: 'One per line, same shape as the allow list. Deny always wins: a tool listed here cannot be rescued by any allow list.',
+          enabled: 'Disabling keeps the row but takes it out of the authorisation decision.',
+        },
         oneLiner: 'Environment-level or team-level MCP tool access control (allow and deny lists of "server__tool").',
         whenNeeded: 'Configure this to narrow who can use which tools.',
         effect: 'allow is intersected across layers (each layer can only narrow), deny is unioned and always wins; the tool list returns only the tools you can actually use.',

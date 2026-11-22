@@ -59,7 +59,6 @@ const RAW_SKELETONS = {
   budgets: { scope: 'api_key', scope_ref: '', period: 'day' },
   budget_policy: { fail_mode: 'sticky', closed_grace_seconds: 60 },
   usage_accounting: { exclude_estimated_usage: false },
-  mcp_policies: { scope: 'env', allow: ['*'], enabled: true },
 };
 
 const IDENTITY = {
@@ -182,6 +181,10 @@ function emptyEntry() {
       anonymous_source_cidrs: '', anonymous_servers: '', anonymous_aggregate_entry: false,
     };
   }
+  if (k === 'mcp_policies') {
+    // One glob per line, like the API-key form's mcp_access box.
+    return { scope: 'env', scope_ref: '', allow_text: '*', deny_text: '', enabled: true };
+  }
   if (RAW_YAML_ONLY.has(k)) {
     // The form is not used for these; the raw tab owns them. An empty object
     // keeps the modal harmless if the tabs are switched by hand.
@@ -239,6 +242,11 @@ function openEdit(e) {
   editing.value = { original: e };
   const f = JSON.parse(JSON.stringify(e));
   const k = activeKind.value;
+  if (k === 'mcp_policies') {
+    f.allow_text = (e.allow ?? []).join('\n');
+    f.deny_text = (e.deny ?? []).join('\n');
+    if (!f.scope) f.scope = 'env';
+  }
   if (RAW_YAML_ONLY.has(k)) {
     form.value = f;
     lastResult.value = null;
@@ -322,6 +330,25 @@ function openEdit(e) {
 function buildEntry() {
   const f = JSON.parse(JSON.stringify(form.value));
   const k = activeKind.value;
+
+  if (k === 'mcp_policies') {
+    const allow = strArr(f.allow_text);
+    // An empty allow list is legal but means "forbid everything at this layer".
+    // Clearing a text box is almost never that intent, so it is refused here —
+    // but only for the name form: an id-form row carries an empty name list by
+    // definition, and refusing there would make the row unsaveable even to
+    // toggle `enabled`. The raw tab still allows the deliberate case.
+    if (!allow.length && !mcpPolicyUsesIdForm.value) throw new Error(t('resources.mcpAllowRequired'));
+    const out = clean({
+      scope: f.scope || 'env',
+      allow,
+      deny: strArr(f.deny_text),
+      enabled: !!f.enabled,
+    });
+    if (!out.deny) delete out.deny;
+    if (out.scope === 'team') out.scope_ref = f.scope_ref;
+    return out;
+  }
 
   if (RAW_YAML_ONLY.has(k)) {
     // Refuse rather than write a half-empty row built from a form that does not
@@ -549,6 +576,13 @@ const guideKinds = computed(() => GUIDE.map((key) => kindOf(key)).filter(Boolean
 const activeRec = computed(() => kindOf(activeKind.value) ?? KINDS[0]);
 const ownPageName = (rec) => (rec?.ownPage ? t(`app.nav.${OWN_PAGE_NAV[rec.ownPage]}`) : '');
 
+// The id form of an MCP policy makes the name lists inert — the gateway reads
+// only the id lists whenever either is present — so the form says so rather than
+// letting an edit look like it took effect.
+const mcpPolicyUsesIdForm = computed(
+  () => Array.isArray(editing.value?.original?.allow_ids) || Array.isArray(editing.value?.original?.deny_ids)
+);
+
 // Field labels resolve through a chain: the per-kind override, then the shared
 // `resourceCatalog.field.*`, then the table-column label `resourceCatalog.col.*`,
 // then the raw key. The chain is what keeps `name`, `url` and `enabled` written
@@ -576,7 +610,7 @@ const FH = (kind, field) => {
 
 async function save() {
   const k = activeKind.value;
-  if (k !== 'mcp_auth_settings' && k !== 'guardrail_attachments' && !form.value.name && !form.value.display_name) {
+  if (k !== 'mcp_auth_settings' && k !== 'guardrail_attachments' && k !== 'mcp_policies' && !form.value.name && !form.value.display_name) {
     lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
@@ -1061,6 +1095,44 @@ onMounted(() => {
           :original="editing?.original"
         />
 
+        <!-- mcp access policies: the name form -->
+        <template v-else-if="activeKind === 'mcp_policies'">
+          <div class="form-row">
+            <label>{{ FL('mcp_policies', 'scope') }}</label>
+            <select v-model="form.scope">
+              <option value="env">env（整个环境）</option>
+              <option value="team">team（某个团队）</option>
+            </select>
+            <p v-if="FH('mcp_policies', 'scope')" class="fh">{{ FH('mcp_policies', 'scope') }}</p>
+          </div>
+          <div class="form-row" v-if="form.scope === 'team'">
+            <label>{{ FL('mcp_policies', 'scope_ref') }} *</label>
+            <select v-model="form.scope_ref">
+              <option value="">选择团队…</option>
+              <option v-for="tm in teamNames" :key="tm" :value="tm">{{ tm }}</option>
+            </select>
+            <p v-if="FH('mcp_policies', 'scope_ref')" class="fh">{{ FH('mcp_policies', 'scope_ref') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('mcp_policies', 'allow') }}</label>
+            <textarea v-model="form.allow_text" rows="3" style="flex: 1" placeholder="github__search&#10;*" />
+            <p v-if="FH('mcp_policies', 'allow')" class="fh">{{ FH('mcp_policies', 'allow') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('mcp_policies', 'deny') }}</label>
+            <textarea v-model="form.deny_text" rows="2" style="flex: 1" placeholder="留空表示不额外拒绝" />
+            <p v-if="FH('mcp_policies', 'deny')" class="fh">{{ FH('mcp_policies', 'deny') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('mcp_policies', 'enabled') }}</label>
+            <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('mcp_policies', 'enabled')" class="fh">{{ FH('mcp_policies', 'enabled') }}</p>
+          </div>
+          <p v-if="mcpPolicyUsesIdForm" class="warn-box" style="margin-top: 8px">
+            {{ t('resources.mcpPolicyIdForm') }}
+          </p>
+        </template>
+
         <!-- collections the form does not model -->
         <template v-else-if="RAW_YAML_ONLY.has(activeKind)">
           <p class="muted">{{ t('resources.useRawYaml') }}</p>
@@ -1332,6 +1404,10 @@ onMounted(() => {
       <template v-else>
         <RawYamlEditor v-model="rawText" />
       </template>
+
+      <div v-if="lastResult && !lastResult.ok" class="error-box" style="margin-top: 14px">
+        <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
+      </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
         <button @click="editing = null">{{ t('common.cancel') }}</button>
