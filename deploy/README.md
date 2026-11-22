@@ -298,6 +298,13 @@ of fields this submission did not mention and that were kept — paths only, nev
 values, because `provider_keys[].api_key` and `mcp_servers.secret` are plaintext in
 this file), `renamed` (references updated by a rename), and a composed `notice`.
 
+**To verify "a save loses no fields" yourself**: back the file up, make the change,
+then change it back, and compare `sha256` and byte count. Byte-identical is the only
+judgement that rules out dirty data all the way through (a stray empty `deny: []`,
+for instance). A one-way change only supports the much weaker "the fields are still
+there", which by construction cannot show you what was added. That is how the 910c
+host verified the rename, and it is worth copying.
+
 ## Saving rewrites the whole file: comments are lost, and one writer only
 
 A console save re-serialises the entire document (`serialize()` in
