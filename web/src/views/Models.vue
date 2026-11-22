@@ -524,6 +524,9 @@ onMounted(load);
     <div v-if="lastResult && !lastResult.ok" class="error-box">
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
+    <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-bottom: 12px">
+      {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}{{ lastResult.notice ? t('common.sep') + lastResult.notice : '' }}
+    </div>
 
     <!-- The same six questions every resource answers, from the same copy the
          catalogue uses. -->

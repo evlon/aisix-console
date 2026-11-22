@@ -26,6 +26,15 @@ import { runEffectChecks } from '../effectChecks.js';
 import { mergeEntry, preservedPaths } from '../entryMerge.js';
 import { propagateModelRename } from '../modelRename.js';
 
+// The one note every write shares. Create and delete rewrite the file exactly the
+// way update does, so a warning that appears on save and not on those two would
+// teach the operator that silence means nothing was lost.
+function commentNote(result) {
+  return result?.commentsDropped
+    ? '原文件里的注释不会被保留：控制台写出的文件不含注释（需要留说明请写在资源名或标签里）'
+    : null;
+}
+
 export function resourcesRouter(ctx) {
   const router = Router();
   const { saver } = ctx;
@@ -214,7 +223,7 @@ export function resourcesRouter(ctx) {
     }
     arr.push(entry);
     const result = await saver.save(doc);
-    res.status(result.ok ? 200 : 409).json(result);
+    res.status(result.ok ? 200 : 409).json({ ...result, notice: commentNote(result) });
   });
 
   router.get('/:kind/:identity', (req, res) => {
@@ -285,6 +294,9 @@ export function resourcesRouter(ctx) {
       notes.push(`本次提交未包含 ${preserved.length} 个既有字段，已按原值保留：${preserved.join('、')}`);
     }
     if (renamed.length) notes.push(`同步更新了 ${renamed.length} 处引用：${renamed.join('、')}`);
+    // One string, one place: this note is shared with create and delete below.
+    const droppedNote = commentNote(result);
+    if (droppedNote) notes.push(droppedNote);
     res.status(result.ok ? 200 : 409).json({
       ...result,
       // Paths only, never values: provider_keys.api_key and mcp_servers.secret
@@ -304,7 +316,7 @@ export function resourcesRouter(ctx) {
     if (idx < 0) return res.status(404).json({ error: '未找到' });
     doc[kind].splice(idx, 1);
     const result = await saver.save(doc);
-    res.status(result.ok ? 200 : 409).json(result);
+    res.status(result.ok ? 200 : 409).json({ ...result, notice: commentNote(result) });
   });
 
   return router;

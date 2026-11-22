@@ -54,9 +54,15 @@ export function createSaver(opts) {
     // replace is the one place all writers pass through. A missing or
     // unreadable previous file simply means there is nothing to carry over.
     let candidate = doc;
+    // The writer serializes the parsed document, so comments cannot survive the
+    // round trip. That is a property of the console owning the file, not a fault —
+    // but it must not be silent: the operator annotated this file and the next
+    // save removes the annotations.
+    let commentsDropped = false;
     try {
       const prev = loadFile(opts.resourcesFile);
       if (prev.ok) candidate = reconcileIds(prev.doc, doc);
+      commentsDropped = /(^|\n)[ \t]*#/.test(prev.text || '');
     } catch {
       /* fall through with the doc as given */
     }
@@ -87,6 +93,7 @@ export function createSaver(opts) {
         ok: true,
         loaded: loaded ? Number(loaded[1]) : null,
         fingerprint: fingerprint(opts.resourcesFile),
+        commentsDropped,
         reload,
       };
     } finally {
