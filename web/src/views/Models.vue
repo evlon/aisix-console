@@ -42,6 +42,12 @@ const providerModelsMsg = ref('');
 
 const emptyForm = () => ({
   display_name: '',
+  // What the user is trying to do. The first question in the form, because the
+  // four shapes below are the CONFIG's vocabulary — someone arriving here with a
+  // goal ("a cheap main model that falls back") does not think in those terms,
+  // and the choice is irreversible in practice: pick the wrong shape and every
+  // field afterwards can still be filled in correctly and save cleanly.
+  purpose: 'direct',
   shape: 'direct',
   direct: {
     provider: 'openai',
@@ -97,6 +103,32 @@ const shapeLabels = {
   semantic: () => t('models.shapeSemantic'),
 };
 const shapeKeys = { direct: 'shapeDirect', routing: 'shapeRouting', ensemble: 'shapeEnsemble', semantic: 'shapeSemantic' };
+
+// Purpose -> shape. The fifth entry is the reason this table is not a rename of
+// the four shapes: an embedding model IS a direct model carrying an `embedding`
+// block (the schema requires `dimensions` in it), but "I want an embedding
+// model" is a purpose in its own right. Exposing only the four shapes made that
+// user pick `direct` and then find a JSON box labelled with a configuration key.
+const PURPOSES = [
+  { key: 'direct', shape: 'direct' },
+  { key: 'routing', shape: 'routing' },
+  { key: 'ensemble', shape: 'ensemble' },
+  { key: 'semantic', shape: 'semantic' },
+  { key: 'embedding', shape: 'direct' },
+];
+const purposeKeys = {
+  direct: 'purposeDirect',
+  routing: 'purposeRouting',
+  ensemble: 'purposeEnsemble',
+  semantic: 'purposeSemantic',
+  embedding: 'purposeEmbedding',
+};
+
+// An existing entry's purpose, derived the same way its shape is.
+const detectPurpose = (e) => {
+  if (e?.embedding) return 'embedding';
+  return detectShape(e);
+};
 
 // Recommended upstream timeouts (ms) per model shape. Routing/failover needs a
 // SHORT request timeout so a hung upstream falls back quickly instead of
@@ -200,6 +232,7 @@ function openEdit(e) {
   const shape = detectShape(e);
   f.display_name = e.display_name ?? '';
   f.shape = shape;
+  f.purpose = detectPurpose(e);
   f.direct = {
     provider: e.provider ?? 'openai',
     model_name: e.model_name ?? '',
@@ -341,6 +374,16 @@ function buildEntry() {
     // JSON text boxes — parse and attach when non-empty (empty = omit, so
     // editing never drops a field the form does not model).
     const emb = parseJsonObj(f.direct.embedding_text, 'embedding');
+    // `embedding` is what makes a direct model an embedding model, and the schema
+    // requires `dimensions` inside it. Both directions are refused here rather
+    // than left to mean something:
+    //   * chosen the embedding purpose but left the box empty — the choice would
+    //     be silently dropped and a plain direct model saved instead;
+    //   * a block without dimensions — the gateway rejects the row.
+    if (f.purpose === 'embedding' && emb === undefined) throw new Error(t('models.embeddingRequired'));
+    if (emb !== undefined && (emb === null || typeof emb !== 'object' || emb.dimensions === undefined)) {
+      throw new Error(t('models.embeddingDimensionsRequired'));
+    }
     if (emb !== undefined) entry.embedding = emb;
     const bmc = parseJsonObj(f.direct.background_model_check_text, 'background_model_check');
     if (bmc !== undefined) entry.background_model_check = bmc;
@@ -510,9 +553,25 @@ onMounted(load);
           <label>{{ t('common.name') }} *</label>
           <input v-model="form.display_name" :placeholder="t('models.upstreamModel')" />
         </div>
+        <!-- Asked first, in the user's terms. The shape below is the same choice
+             named the way the configuration names it, kept visible so nobody has
+             to open the raw YAML to find out what this model actually is. -->
+        <div class="form-row">
+          <label>{{ t('models.purpose') }}</label>
+          <select
+            v-model="form.purpose"
+            @change="form.shape = (PURPOSES.find((p) => p.key === form.purpose) || {}).shape || 'direct'"
+          >
+            <option v-for="p in PURPOSES" :key="p.key" :value="p.key">{{ t('models.' + purposeKeys[p.key]) }}</option>
+          </select>
+          <p class="fh">{{ t('models.purposeHint') }}</p>
+        </div>
         <div class="form-row">
           <label>{{ t('models.shape') }}</label>
-          <select v-model="form.shape">
+          <select
+            v-model="form.shape"
+            @change="form.purpose = form.shape === 'direct' && (form.direct.embedding_text || '').trim() ? 'embedding' : form.shape"
+          >
             <option v-for="(k, val) in shapeKeys" :key="val" :value="val">{{ t('models.' + k) }}</option>
           </select>
         </div>
@@ -759,6 +818,10 @@ onMounted(load);
         <RawYamlEditor :model-value="previewYaml" />
         <div class="muted" style="margin-top: 6px">{{ t('models.rawPreviewHint') }}</div>
       </template>
+
+      <div v-if="lastResult && !lastResult.ok" class="error-box" style="margin-top: 14px">
+        <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
+      </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
         <button @click="editing = null">{{ t('common.cancel') }}</button>

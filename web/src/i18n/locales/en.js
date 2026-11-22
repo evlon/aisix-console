@@ -133,6 +133,18 @@ export default {
     edit: 'Edit {name}',
     deleteConfirm: 'Delete model "{name}"?',
     shape: 'Model shape',
+    purpose: 'What it is for',
+    purposeHint:
+      'The row above is what you want it to do; the one below is the same choice under the name the configuration uses. They stay in step — pick the shape directly if you know it, pick the purpose if you are not sure.',
+    purposeDirect: 'One upstream provider serves it directly',
+    purposeRouting: 'Pick one of several upstreams or models (failover, weights, status-based fallback)',
+    purposeEnsemble: 'Ask several models at once, then pick one answer',
+    purposeSemantic: 'Pick a route by what the question means',
+    purposeEmbedding: 'Embedding model (similarity, for retrieval or a semantic router)',
+    embeddingRequired:
+      'Choosing the embedding purpose requires an embedding config: without one the choice is dropped and an ordinary direct model is saved. At least dimensions is needed.',
+    embeddingDimensionsRequired:
+      'dimensions is required inside the embedding config (the upstream schema says so); normalize alone makes the gateway reject the whole row.',
     shapeDirect: 'Direct',
     shapeRouting: 'Routing / fallback',
     shapeEnsemble: 'Ensemble',

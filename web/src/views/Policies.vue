@@ -1525,6 +1525,10 @@ onMounted(load);
         <RawYamlEditor v-model="rawText" />
       </template>
 
+      <div v-if="lastResult && !lastResult.ok" class="error-box" style="margin-top: 14px">
+        <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
+      </div>
+
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
         <button @click="editing = null">{{ t('common.cancel') }}</button>
         <button class="primary" :disabled="saving" @click="tab === 'form' ? save() : saveRaw()">

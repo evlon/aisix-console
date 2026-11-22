@@ -139,6 +139,18 @@ export default {
     edit: '编辑 {name}',
     deleteConfirm: '删除模型 "{name}"？',
     shape: '模型形态',
+    purpose: '用途',
+    purposeHint:
+      '上面选的是「你要它做什么」，下面是同一件事在配置里的名字。两者互相同步 —— 懂配置可以直接选形态，不确定就选用途。',
+    purposeDirect: '接一个上游供应商，直接由它提供',
+    purposeRouting: '在多个上游／模型之间挑一个（故障转移、加权、按状态回退）',
+    purposeEnsemble: '同时问多个模型，再挑一个答案',
+    purposeSemantic: '按问题的意思挑一条路由',
+    purposeEmbedding: '嵌入模型（算相似度，供检索或语义路由使用）',
+    embeddingRequired:
+      '选了「嵌入模型」就必须填嵌入配置：不填的话这个选择会被丢掉，保存出来只是一个普通模型。至少要给 dimensions。',
+    embeddingDimensionsRequired:
+      '嵌入配置里的 dimensions 是必填的（上游 schema 要求）；只填 normalize 会被网关拒掉整行。',
     shapeDirect: '直连',
     shapeRouting: '路由/回退',
     shapeEnsemble: '集成',

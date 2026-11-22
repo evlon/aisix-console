@@ -516,6 +516,10 @@ onMounted(load);
         </details>
         <div class="muted" v-if="editing.display_name" style="font-size: 12px; margin-bottom: 8px">{{ t('apiKeys.immutableHint') }}</div>
 
+        <div v-if="lastResult && !lastResult.ok" class="error-box" style="margin-top: 14px">
+          <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
+        </div>
+
         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
           <button @click="editing = null">{{ t('common.cancel') }}</button>
           <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
