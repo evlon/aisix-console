@@ -264,9 +264,13 @@ export const FORM_FIELDS = {
   pricing: ['key', 'input_per_1k', 'output_per_1k'],
   budget_policy: ['fail_mode', 'closed_grace_seconds'],
   usage_accounting: ['exclude_estimated_usage'],
-  // Models' page translates its own labels; this is the one field that still
+  // Models' page translates its own labels; these are the JSON boxes that still
   // showed the configuration key.
-  models: ['pricing_key'],
+  models: ['pricing_key', 'embedding', 'background_model_check', 'effort_mapping'],
+  provider_keys: [
+    'apis', 'request', 'response', 'tls',
+    'resolve_addresses', 'strip_headers', 'telemetry_tags',
+  ],
   teams: ['name', 'tags'],
   // The caller key's page keeps its own labels for the common fields (they are
   // already translated there); these are the ones that live in its advanced

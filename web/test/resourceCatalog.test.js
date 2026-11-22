@@ -408,6 +408,7 @@ test('the form template and FORM_FIELDS describe the same fields', () => {
     '../src/views/Policies.vue',
     '../src/views/ApiKeys.vue',
     '../src/views/Models.vue',
+    '../src/views/ProviderKeys.vue',
   ]) {
     const src = readFileSync(path.join(here, file), 'utf8');
     // Kind keys contain digits (`a2a_agents`), hence [a-z0-9_].
@@ -437,8 +438,10 @@ test('the form template and FORM_FIELDS describe the same fields', () => {
 
 test('no raw configuration key is left as a form label', () => {
   // The regression guard for this whole change: `<label>auth_type</label>`, the
-  // Policies page's vendor fields (`access_key_id`, `window_size`, …), and the
-  // caller-key page's advanced section.
+  // Policies page's vendor fields (`access_key_id`, `window_size`, …), the
+  // caller-key page's advanced section, and — the blind spot this pattern had —
+  // keys carrying a ` (JSON)` hint, which an earlier version of this regex let
+  // through (`<label>embedding (JSON)</label>` on the Models page).
   const here = path.dirname(fileURLToPath(import.meta.url));
   const problems = [];
   for (const file of [
@@ -446,9 +449,10 @@ test('no raw configuration key is left as a form label', () => {
     '../src/views/Policies.vue',
     '../src/views/ApiKeys.vue',
     '../src/views/Models.vue',
+    '../src/views/ProviderKeys.vue',
   ]) {
     const src = readFileSync(path.join(here, file), 'utf8');
-    for (const m of src.matchAll(/<label>\s*([a-z][a-z0-9_]*(?:[\s.][a-z_]+)*)\s*\*?\s*<\/label>/g)) {
+    for (const m of src.matchAll(/<label>\s*([a-z][a-z0-9_.]*(?:\s*\(JSON\))?)\s*\*?\s*<\/label>/g)) {
       problems.push(`${file}: ${m[1]}`);
     }
   }

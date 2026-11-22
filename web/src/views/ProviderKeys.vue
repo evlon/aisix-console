@@ -3,8 +3,29 @@ import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
+import ResourceFacts from '../components/ResourceFacts.vue';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
+
+// Field labels and help come from the catalogue copy, the same chain the resource
+// catalogue uses: per-kind override, then shared field.*, then the column label.
+// The seven JSON boxes below used to be labelled with their configuration keys.
+const FL = (kind, field) => {
+  const keys = [
+    `resourceCatalog.kind.${kind}.field.${field}`,
+    `resourceCatalog.field.${field}`,
+    `resourceCatalog.col.${field}`,
+  ];
+  for (const key of keys) if (te(key)) return t(key);
+  return field;
+};
+
+const FH = (kind, field) => {
+  for (const key of [`resourceCatalog.kind.${kind}.fieldHelp.${field}`, `resourceCatalog.fieldHelp.${field}`]) {
+    if (te(key)) return t(key);
+  }
+  return '';
+};
 const entries = ref([]);
 const loading = ref(false);
 const editing = ref(null); // null = hidden, {} = create, object = edit
@@ -169,6 +190,11 @@ onMounted(load);
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
 
+    <!-- The same six questions every resource answers, from the same copy the
+         catalogue uses. All three own-page kinds carry one, so the pages a user
+         is most likely to land on first do not differ in shape. -->
+    <ResourceFacts kind="provider_keys" />
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <h3 style="margin: 0">{{ t('providerKeys.title') }}</h3>
@@ -250,32 +276,39 @@ onMounted(load);
       <details style="margin-top: 12px">
         <summary>{{ t('providerKeys.advanced') }}</summary>
         <div class="form-row">
-          <label>apis (JSON)</label>
+          <label>{{ FL('provider_keys', 'apis') }}</label>
           <textarea v-model="form.apis_text" rows="3" style="flex: 1" placeholder='{"messages": {"base": "…/anthropic"}}' />
+          <p v-if="FH('provider_keys', 'apis')" class="fh">{{ FH('provider_keys', 'apis') }}</p>
         </div>
         <div class="form-row">
-          <label>request (JSON)</label>
+          <label>{{ FL('provider_keys', 'request') }}</label>
           <textarea v-model="form.request_text" rows="3" style="flex: 1" placeholder='{"param_renames": {"max_tokens": "max_completion_tokens"}}' />
+          <p v-if="FH('provider_keys', 'request')" class="fh">{{ FH('provider_keys', 'request') }}</p>
         </div>
         <div class="form-row">
-          <label>response (JSON)</label>
+          <label>{{ FL('provider_keys', 'response') }}</label>
           <textarea v-model="form.response_text" rows="2" style="flex: 1" placeholder='{"reasoning_field": "delta.reasoning_content"}' />
+          <p v-if="FH('provider_keys', 'response')" class="fh">{{ FH('provider_keys', 'response') }}</p>
         </div>
         <div class="form-row">
-          <label>tls (JSON)</label>
+          <label>{{ FL('provider_keys', 'tls') }}</label>
           <textarea v-model="form.tls_text" rows="2" style="flex: 1" placeholder='{"ca_cert": "-----BEGIN…", "verify": true}' />
+          <p v-if="FH('provider_keys', 'tls')" class="fh">{{ FH('provider_keys', 'tls') }}</p>
         </div>
         <div class="form-row">
-          <label>resolve_addresses (JSON)</label>
+          <label>{{ FL('provider_keys', 'resolve_addresses') }}</label>
           <textarea v-model="form.resolve_addresses_text" rows="2" style="flex: 1" placeholder='["10.0.0.5"]' />
+          <p v-if="FH('provider_keys', 'resolve_addresses')" class="fh">{{ FH('provider_keys', 'resolve_addresses') }}</p>
         </div>
         <div class="form-row">
-          <label>strip_headers (JSON)</label>
+          <label>{{ FL('provider_keys', 'strip_headers') }}</label>
           <textarea v-model="form.strip_headers_text" rows="2" style="flex: 1" placeholder='["authorization","cookie"]' />
+          <p v-if="FH('provider_keys', 'strip_headers')" class="fh">{{ FH('provider_keys', 'strip_headers') }}</p>
         </div>
         <div class="form-row">
-          <label>telemetry_tags (JSON)</label>
+          <label>{{ FL('provider_keys', 'telemetry_tags') }}</label>
           <textarea v-model="form.telemetry_tags_text" rows="2" style="flex: 1" placeholder='{"kind": "byo", "pk_label": "prod"}' />
+          <p v-if="FH('provider_keys', 'telemetry_tags')" class="fh">{{ FH('provider_keys', 'telemetry_tags') }}</p>
         </div>
       </details>
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px">
@@ -288,3 +321,20 @@ onMounted(load);
     </Modal>
   </div>
 </template>
+
+<style scoped>
+/* The label column holds Chinese field names and the help sits under the input
+   spanning both columns: a 40-character sentence in the label column would wrap
+   to four lines and bury the input. */
+.modal .form-row {
+  grid-template-columns: 200px 1fr;
+}
+
+.modal .form-row > .fh {
+  grid-column: 2;
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+</style>

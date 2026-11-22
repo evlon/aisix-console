@@ -204,6 +204,16 @@ export default {
       mcpAccessDeny: 'MCP 工具拒绝清单',
       mcpRateLimits: '每个 MCP 服务器的限额（JSON）',
       pricing_key: '计费键',
+      embedding: '嵌入模型配置（JSON）',
+      background_model_check: '后台模型检查（JSON）',
+      effort_mapping: '推理档位映射（JSON）',
+      apis: '上游接口清单（JSON）',
+      request: '请求改写（JSON）',
+      response: '响应改写（JSON）',
+      tls: 'TLS 校验（JSON）',
+      resolve_addresses: '地址解析覆盖（JSON）',
+      strip_headers: '要剥离的请求头（JSON）',
+      telemetry_tags: '遥测标签（JSON）',
     },
 
     // ── form field help ──
@@ -265,6 +275,15 @@ export default {
     kind: {
       provider_keys: {
         label: '上游密钥',
+        fieldHelp: {
+          apis: '这把上游密钥能调哪些接口。留空等于不限制。',
+          request: '转发前对请求做的改写（增删头、改字段）。写错的表现是上游收到一个它不认识的请求。',
+          response: '对上游响应做的改写，用法与请求侧相同。',
+          tls: '是否校验上游证书、SNI 与 CA。关掉校验等于放弃对上游的身份确认 —— 只在明确知道链路可信时才关。',
+          resolve_addresses: '把上游域名强制解析到指定 IP，常用于内网直连。改错会让这个上游整体不可达。',
+          strip_headers: '转发前删掉这些请求头。典型用法是去掉调用方自带的鉴权头，免得上游同时收到两个冲突的身份。',
+          telemetry_tags: '附加到该上游相关指标与日志上的标签，用于在用量统计里按上游分组。',
+        },
         oneLiner: '把某个上游厂商的 API Key 存一次，让多个模型共用；轮换只改这一处。',
         whenNeeded: '凡是要真正打上游的模型（direct 类）都必须引用一个上游密钥。',
         effect: '引用它的模型能正常调用；GET /admin/v1/provider_keys 开始列出它；/status/config 的计数 +1。',
@@ -281,6 +300,9 @@ export default {
         label: '模型',
         fieldHelp: {
           pricing_key: '指向计费价目里的那一行（按名字精确匹配）。留空则回落到模型自己的内联成本；两者都没有时，这个模型在最低成本排序里永远是最后。',
+          embedding: '把它标成嵌入模型：维度、是否归一化等。填了它，这个模型就走嵌入那条路，而不是对话补全。',
+          background_model_check: '后台探活与摘除的参数（间隔、超时、连续失败阈值）。不填用网关默认；填错的表现是模型被悄悄摘掉或再也不被摘掉。',
+          effort_mapping: '把请求里的推理档位（low / medium / high）映射到供应商自己的参数名与取值。不做映射时档位被忽略，而不是报错。',
         },
         oneLiner: '对外开放的模型名，以及它落到哪个上游模型上。',
         whenNeeded: '调用方要用的每个模型都得在这里声明一次。请求里的 model 字段填的就是这里的名字。',

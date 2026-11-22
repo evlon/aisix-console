@@ -562,16 +562,19 @@ onMounted(load);
           <details style="margin-top: 10px">
             <summary>{{ t('models.advanced') }}</summary>
             <div class="form-row">
-              <label>embedding (JSON)</label>
+              <label>{{ FL('models', 'embedding') }}</label>
               <textarea v-model="form.direct.embedding_text" rows="2" style="flex: 1" placeholder='{"dimensions": 1536, "normalize": true}' />
+              <p v-if="FH('models', 'embedding')" class="fh">{{ FH('models', 'embedding') }}</p>
             </div>
             <div class="form-row">
-              <label>background_model_check (JSON)</label>
+              <label>{{ FL('models', 'background_model_check') }}</label>
               <textarea v-model="form.direct.background_model_check_text" rows="4" style="flex: 1" placeholder='{"enabled": true, "interval_seconds": 60, …}' />
+              <p v-if="FH('models', 'background_model_check')" class="fh">{{ FH('models', 'background_model_check') }}</p>
             </div>
             <div class="form-row">
-              <label>effort_mapping (JSON)</label>
+              <label>{{ FL('models', 'effort_mapping') }}</label>
               <textarea v-model="form.direct.effort_mapping_text" rows="2" style="flex: 1" placeholder='{"*": "high"}' />
+              <p v-if="FH('models', 'effort_mapping')" class="fh">{{ FH('models', 'effort_mapping') }}</p>
             </div>
             <div class="form-row">
               <label>{{ FL('models', 'pricing_key') }}</label>

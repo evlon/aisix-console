@@ -206,6 +206,16 @@ export default {
       mcpAccessDeny: 'MCP tools denied',
       mcpRateLimits: 'Per-MCP-server limits (JSON)',
       pricing_key: 'Pricing key',
+      embedding: 'Embedding config (JSON)',
+      background_model_check: 'Background model check (JSON)',
+      effort_mapping: 'Reasoning effort mapping (JSON)',
+      apis: 'Upstream APIs (JSON)',
+      request: 'Request rewrite (JSON)',
+      response: 'Response rewrite (JSON)',
+      tls: 'TLS verification (JSON)',
+      resolve_addresses: 'Address resolution override (JSON)',
+      strip_headers: 'Headers to strip (JSON)',
+      telemetry_tags: 'Telemetry tags (JSON)',
     },
 
     // ── form field help ── see the note in zh-CN.js
@@ -262,6 +272,15 @@ export default {
     kind: {
       provider_keys: {
         label: 'Upstream keys',
+        fieldHelp: {
+          apis: 'Which upstream APIs this key may call. Blank means unrestricted.',
+          request: 'Rewrites applied to the request before forwarding (adding or removing headers, changing fields). A wrong value shows up as the upstream receiving a request it does not understand.',
+          response: 'Rewrites applied to the upstream response, the same shape as the request side.',
+          tls: 'Whether the upstream certificate, SNI and CA are verified. Turning it off gives up confirming who the upstream is — do it only on a link you know is trusted.',
+          resolve_addresses: 'Forces the upstream hostname to resolve to given IPs, usually for reaching it over an internal network. A wrong value takes that whole upstream offline.',
+          strip_headers: 'Request headers to drop before forwarding. The usual use is removing the caller\'s own authorisation header so the upstream does not receive two conflicting identities.',
+          telemetry_tags: 'Tags attached to this upstream\'s metrics and logs, so the usage page can group by upstream.',
+        },
         oneLiner: 'Store one upstream vendor API key once and share it across models; rotating it means changing this one place.',
         whenNeeded: 'Every model that actually calls upstream (the direct kind) must reference an upstream key.',
         effect: 'Models that reference it can be called; GET /admin/v1/provider_keys starts listing it; the count in /status/config goes up by 1.',
@@ -278,6 +297,9 @@ export default {
         label: 'Models',
         fieldHelp: {
           pricing_key: 'Points at a row in the pricing table (matched by name). Blank falls back to the model\'s own inline cost; with neither, the model sorts last forever under least-cost.',
+          embedding: 'Marks this as an embedding model: dimensions, whether to normalise, and so on. With it set the model takes the embedding path rather than chat completion.',
+          background_model_check: 'The background liveness and ejection parameters (interval, timeout, consecutive failures). Blank uses the gateway default; a wrong value shows up as a model being quietly ejected, or never ejected at all.',
+          effort_mapping: 'Maps the reasoning effort a request asks for (low / medium / high) onto the provider\'s own parameter names and values. Without a mapping the effort is ignored rather than rejected.',
         },
         oneLiner: 'The model name you expose, and which upstream model it lands on.',
         whenNeeded: 'Every model a caller uses must be declared here once. The model field in a request is the name you write here.',

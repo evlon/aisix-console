@@ -31,6 +31,7 @@ const FILES = [
   '../src/views/Policies.vue',
   '../src/views/ApiKeys.vue',
   '../src/views/Models.vue',
+  '../src/views/ProviderKeys.vue',
   '../src/views/Metrics.vue',
 ];
 
@@ -38,7 +39,7 @@ const FILES = [
 // usage and would just duplicate the check.
 const OWNED_PREFIXES = [
   'obs.', 'fmt.', 'resources.', 'metrics.', 'resourceCatalog.', 'dashboard.',
-  'policies.', 'apiKeys.', 'models.',
+  'policies.', 'apiKeys.', 'models.', 'providerKeys.',
 ];
 
 const locales = { 'zh-CN': zh, en };
