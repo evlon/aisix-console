@@ -74,6 +74,14 @@ export default {
       closed_grace_seconds: 'Grace (seconds)',
       exclude_estimated_usage: 'Exclude estimated usage',
       jwt_provider: 'Applies to provider',
+      // Columns of the kinds maintained on the Policies page.
+      window: 'Window',
+      limits: 'Limits',
+      backend: 'Backend',
+      ttl: 'TTL',
+      applies_to: 'Applies to',
+      kind: 'Kind',
+      hook_point: 'Hook point',
     },
 
     // ── groups ──
@@ -279,7 +287,7 @@ export default {
         effect: 'The /mcp aggregate endpoint starts offering these tools; /mcp/<name> offers one server\'s raw tool names; upstream credentials held by the gateway are never handed down to the caller.',
         ifAbsent: 'No tools appear in /mcp, and /mcp/<name> returns 404 "unknown MCP server".',
         trap: 'auth_type wants a secret but it is left out → the whole row is rejected at load time and the endpoint stays 404',
-        verify: 'curl -s $GW/mcp -H "x-aisix-api-key: $KEY" -d \'{"jsonrpc":"2.0","method":"tools/list"}\'',
+        verify: "curl -s $GW/mcp -H \"x-aisix-api-key: $KEY\" -d '{'{'}\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"{'}'}'",
         mis: [
           'auth_type is bearer/api_key with no secret, or oauth2 missing client_id/token_url → rejected at load time (the gateway is not allowed to authenticate with empty credentials).',
           'name contains a double underscore or ends with a single underscore → rejected at load. It is the tool namespace prefix, parsed by splitting on the double underscore.',
@@ -341,7 +349,7 @@ export default {
         verify: 'The team_name label in /metrics no longer shows unknown',
         mis: [
           'The team document id must equal the key\'s team_id; if they differ it is not configured at all — metrics stay unknown and team-level rate limits and budgets do not apply to that key.',
-          'Tag keys must match ^[a-z][a-z0-9_]{0,62}$; uppercase or a hyphen is rejected on the write path, but an existing row still loads, so "the console rejects it while production keeps running it".',
+          'Tag keys must be lowercase, start with a letter, contain only letters, digits and underscores, and be at most 63 characters; a non-conforming key is rejected on the write path, but an existing row still loads — so "the console rejects it while production keeps running it".',
           'name is an empty string → reported as unknown (no error).',
         ],
       },
@@ -461,7 +469,7 @@ export default {
         effect: 'On a hit the gateway returns the cache before calling upstream, with the x-aisix-cache: hit response header (miss otherwise); upstream cost and latency both drop.',
         ifAbsent: 'Every request goes upstream and repeated questions are paid for repeatedly.',
         trap: 'applies_to misspelled → silently widens from "one model" to "the whole environment"',
-        verify: 'Send the same request twice: the second response should carry the x-aisix-cache: hit header; the aisix_cache_requests_total{outcome="hit_exact"} metric rises',
+        verify: 'Send the same request twice: the second response should carry the x-aisix-cache: hit header; the aisix_cache_requests_total series with outcome="hit_exact" rises',
         mis: [
           'applies_to is a free string and recognizes only all, model:<name>, api_key:<id>; any other value (including an empty string) parses as "everything". A misspelled name after model: widens the policy silently from "one model" to "the whole environment". This is the most dangerous spot for this resource.',
           'Backend set to redis but the gateway bootstrap config has no redis → matching requests are not cached, no cache header is sent, the status is disabled, and only one warn appears.',
@@ -476,7 +484,7 @@ export default {
         effect: 'Over the limit returns 429 with retry-after, x-ratelimit-limit and x-ratelimit-remaining in the response.',
         ifAbsent: 'There is no limit at this layer (the key\'s and model\'s inline limits still apply).',
         trap: 'Mixing the two forms rejects the whole row; there are no per-hour or per-second token fields',
-        verify: 'Load-testing past the limit should give 429 with retry-after; the aisix_ratelimit_rejections_total{layer="policy"} metric rises',
+        verify: 'Load-testing past the limit should give 429 with retry-after; the aisix_ratelimit_rejections_total series with layer="policy" rises',
         mis: [
           'Mixing the classic form (scope + window) with the condition form (limits) → the whole row is rejected, not partly applied.',
           'The classic form missing its scope target or window, or the condition form given all-zero limits → the whole row is rejected.',

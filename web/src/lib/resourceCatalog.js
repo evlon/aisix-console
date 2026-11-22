@@ -102,6 +102,17 @@ export const COLS = {
   mcp_policies: ['scope', 'scope_ref', 'enabled'],
 };
 
+// Columns for the kinds maintained on their OWN page (the Policies page renders
+// these three). Separate from COLS on purpose: the catalogue deliberately does
+// not duplicate an owning page's table, but the owning page still needs column
+// labels rather than raw field names — its header used to fall through to
+// `scope_ref`, `applies_to`, `hook_point` and friends in a Chinese UI.
+export const PAGE_COLS = {
+  rate_limit_policies: ['name', 'scope', 'scope_ref', 'window', 'limits'],
+  cache_policies: ['name', 'backend', 'ttl', 'applies_to', 'scope'],
+  guardrails: ['name', 'kind', 'hook_point', 'enabled'],
+};
+
 // Who references this kind, and by which identity: `id` means the referencing
 // field holds the target's UUID, `name` means it holds its name. This is the
 // single most common place to get a resource wrong, so the detail view states

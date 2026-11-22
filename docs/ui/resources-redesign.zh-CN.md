@@ -418,6 +418,7 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 | 生效自检 | 新增 `server/src/effectChecks.js`（15 条）+ `GET /api/resources/effect-checks`；每次保存后自动刷新 |
 | **编辑层表单** | `Resources.vue` 表单的 **64 个字段标签全部改为中文**（原为 `auth_type`、`forward_client_headers` 这类配置键名，共 68 处）。三层解析：每资源覆盖 → 共享 `field.*` → 表格列标签 `col.*` → 原键名兜底 |
 | **字段说明文字** | 68 个表单行各一行说明（输入框下方、跨第二列），中英各 50 条（46 共享 + 4 按资源覆盖）。测试要求**每个字段都有说明**，且**没有无人使用的说明文案** |
+| **「策略」页浏览层** | 复用同一套六问说明带（`ResourceFacts`，文案直接复用）；表格列定义抽到 `PAGE_COLS`，表头由 `resourceCatalog.col.*` 解析 —— 原先中文界面里显示 `SCOPE_REF`/`APPLIES_TO`/`HOOK_POINT` |
 | 修掉的真缺陷 | `Dashboard.vue` 里「被拒绝的资源」表头写成「上游密钥」——抽取共用组件后由构造消除 |
 | 测试 | 新增 `server/test/effectChecks.test.js`(23) 与 `web/test/resourceCatalog.test.js`(12)；**server 83 项、web 34 项全通过** |
 | 构建 | `npx vite build` 通过 |
@@ -435,8 +436,15 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 1. 目录页多了一个标题 —— `App.vue` 已按路由渲染页面标题，我又写了一个 `h1`，重复；已去掉自己的标题，详情页的资源名降为二级标题。
 2. **网关不可达时反馈条仍宣称「本次加载全部通过」** —— 判断条件写成了 `!config`，而状态接口在网关掉线时返回的是 `{reachable:false}` 对象、不是 null。这正是本设计要消灭的「假安心」，已改为按「有没有 state 字段」判断，并在无裁决时显示「网关不可达，无法确认配置是否被加载」。
 
-**P3 进行中**：编辑层的**字段标签**（64 个字段、68 处）与**字段说明文字**（每个字段一行「填什么、为什么、填错的后果」，
-中英各 50 条，其中 4 条按资源覆盖）都已完成；**「策略」页复用**尚未开始，按 §8 推进。
+**P3 进行中**：资源集成编辑层的**字段标签**与**字段说明文字**都已完成；
+**「策略」页**的浏览层（六问 + 表头）也已完成，但它的**护栏表单**还有 56 处裸键名
+（各厂商护栏的专有字段：`access_key_id`、`analyzer_url`、`halt_on_blocklist_hit` 等），
+以及「资源集成」的 `PAGE_COLS` 之外的列，留待下一步。
+
+**一个只有渲染才能发现的坑**：`verify` 等文案里含裸花括号（curl 的 JSON、正则 `{0,62}`、指标 `{outcome=...}`）
+会让 vue-i18n 的消息编译失败，**组件静默渲染成一个注释节点、浏览器控制台没有任何报错**。
+它让 4 种资源（`mcp_servers`、`teams`、`cache_policies`、`rate_limit_policies`）的说明带整体消失。
+现在有一条测试禁止未转义的花括号，字面量必须写成 `{'{'}` / `{'}'}`。
 
 ---
 

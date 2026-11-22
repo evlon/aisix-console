@@ -4,9 +4,11 @@ import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
+import ResourceFacts from '../components/ResourceFacts.vue';
+import { PAGE_COLS } from '../lib/resourceCatalog.js';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 
 const KINDS = [
   { key: 'rate_limit_policies', label: () => t('policies.rateLimit') },
@@ -604,9 +606,16 @@ async function remove(e) {
 }
 
 function tableCols() {
-  if (activeKind.value === 'rate_limit_policies') return ['name', 'scope', 'scope_ref', 'window', 'limits'];
-  if (activeKind.value === 'cache_policies') return ['name', 'backend', 'ttl', 'applies_to', 'scope'];
-  return ['name', 'kind', 'hook_point', 'enabled'];
+  // Shared with the catalogue's structural guard so the column set cannot drift
+  // from the labels web/test/resourceCatalog.test.js checks.
+  return PAGE_COLS[activeKind.value] ?? [];
+}
+
+// The header used to fall through to the raw field name, which is how a Chinese
+// UI ended up showing SCOPE_REF, APPLIES_TO and HOOK_POINT.
+function colLabel(field) {
+  const key = `resourceCatalog.col.${field}`;
+  return te(key) ? t(key) : field;
 }
 
 function cell(e, col) {
@@ -636,6 +645,11 @@ onMounted(load);
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
 
+    <!-- The same six questions every resource answers, from the same copy the
+         catalogue uses (resourceCatalog.kind.*). The hint below stays: it is
+         accurate about the form covering only the common cases. -->
+    <ResourceFacts :kind="activeKind" />
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <h3 style="margin: 0">{{ kindOf(activeKind).label() }}</h3>
@@ -645,7 +659,7 @@ onMounted(load);
       <table style="margin-top: 12px">
         <thead>
           <tr>
-            <th v-for="c in tableCols()" :key="c">{{ c === 'name' ? t('common.name') : c === 'enabled' ? t('common.status') : c }}</th>
+            <th v-for="c in tableCols()" :key="c">{{ colLabel(c) }}</th>
             <th>{{ t('common.actions') }}</th>
           </tr>
         </thead>

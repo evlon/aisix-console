@@ -26,6 +26,7 @@ import {
   MIS_MODES,
   OWN_PAGE_NAV,
   FORM_FIELDS,
+  PAGE_COLS,
 } from '../src/lib/resourceCatalog.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -75,7 +76,9 @@ test('every kind answers the six questions in both locales', () => {
 
 test('every table column has a label — no raw-field-name fallback', () => {
   const missing = [];
-  for (const [kind, cols] of Object.entries(COLS)) {
+  // Both tables: the catalogue's own detail views, and the kinds whose table
+  // lives on their owning page (Policies).
+  for (const [kind, cols] of Object.entries({ ...COLS, ...PAGE_COLS })) {
     assert.ok(KINDS.some((k) => k.key === kind), `COLS names unknown kind ${kind}`);
     for (const field of cols) {
       for (const [name, loc] of Object.entries(locales)) {
@@ -86,6 +89,16 @@ test('every table column has a label — no raw-field-name fallback', () => {
     }
   }
   assert.deepEqual(missing, [], `missing column labels:\n${missing.join('\n')}`);
+});
+
+test('PAGE_COLS covers exactly the kinds another page maintains', () => {
+  // The catalogue renders no table for these, so a kind here without ownPage
+  // would mean two places render the same rows.
+  for (const kind of Object.keys(PAGE_COLS)) {
+    const rec = KINDS.find((k) => k.key === kind);
+    assert.ok(rec, `PAGE_COLS names unknown kind ${kind}`);
+    assert.ok(rec.ownPage, `${kind} is in PAGE_COLS but has no owning page`);
+  }
 });
 
 test('own-page kinds have no table of their own', () => {
@@ -245,6 +258,31 @@ test('no field copy key contains a dot', () => {
     for (const field of fields) if (field.includes('.')) bad.push(`${kind}.${field}`);
   }
   assert.deepEqual(bad, [], `field keys must not contain a dot: ${bad.join(', ')}`);
+});
+
+test('no message carries a brace that i18n would read as interpolation', () => {
+  // vue-i18n's message compiler reads `{...}` as interpolation. A bare brace in a
+  // curl body, a regex quantifier or a metric label makes the message unusable,
+  // and the component rendering it vanishes — as a comment node, with nothing in
+  // the browser console. That is exactly how the six-question band silently
+  // stopped rendering for mcp_servers, teams, cache_policies and
+  // rate_limit_policies. Literal braces have to be written {'{'} and {'}'}.
+  const ALLOWED = /\{(?:'\{'|'\}'|[A-Za-z_][A-Za-z0-9_]*)\}/g;
+  const problems = [];
+  const walk = (node, path) => {
+    for (const [key, value] of Object.entries(node)) {
+      const where = path ? `${path}.${key}` : key;
+      if (typeof value === 'string') {
+        if (!value.includes('{') && !value.includes('}')) continue;
+        const rest = value.replace(ALLOWED, '');
+        if (rest.includes('{') || rest.includes('}')) problems.push(`${where}: ${value.slice(0, 100)}`);
+      } else if (value && typeof value === 'object') {
+        walk(value, where);
+      }
+    }
+  };
+  for (const [name, loc] of Object.entries(locales)) walk(loc.resourceCatalog, name);
+  assert.deepEqual(problems, [], `unescaped braces:\n${problems.join('\n')}`);
 });
 
 test('every field a form renders has one line of help, in both locales', () => {

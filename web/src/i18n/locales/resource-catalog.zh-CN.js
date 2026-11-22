@@ -74,6 +74,14 @@ export default {
       closed_grace_seconds: '宽限（秒）',
       exclude_estimated_usage: '排除估算用量',
       jwt_provider: '适用提供方',
+      // Columns of the kinds maintained on the Policies page.
+      window: '窗口',
+      limits: '上限',
+      backend: '缓存后端',
+      ttl: '有效期',
+      applies_to: '作用于',
+      kind: '类型',
+      hook_point: '检查时机',
     },
 
     // ── groups ──
@@ -282,7 +290,7 @@ export default {
         effect: '/mcp 聚合端点开始提供这些工具；/mcp/<名> 提供单服务器的原始工具名；网关持有的上游凭据不会下发给调用方。',
         ifAbsent: '/mcp 里没有工具，/mcp/<名> 返回 404「unknown MCP server」。',
         trap: 'auth_type 要密钥却漏填 → 加载时整行被拒，端点一直 404',
-        verify: 'curl -s $GW/mcp -H "x-aisix-api-key: $KEY" -d \'{"jsonrpc":"2.0","method":"tools/list"}\'',
+        verify: "curl -s $GW/mcp -H \"x-aisix-api-key: $KEY\" -d '{'{'}\"jsonrpc\":\"2.0\",\"method\":\"tools/list\"{'}'}'",
         mis: [
           'auth_type 选了 bearer/api_key 却没给 secret，或 oauth2 缺 client_id/token_url → 加载时就被拒（不让网关拿空凭据去认证）。',
           'name 含双下划线或以单下划线结尾 → 加载被拒。它是工具命名空间前缀，靠双下划线分割解析。',
@@ -344,7 +352,7 @@ export default {
         verify: '/metrics 里指标的 team_name 标签不再出现 unknown',
         mis: [
           '团队文档的 id 必须等于 key 的 team_id，二者不一致等于没配 —— 指标仍是 unknown，团队级限流与预算对这把 key 完全不适用。',
-          'tags 的键要匹配 ^[a-z][a-z0-9_]{0,62}$，大写或连字符在写路径被拒；但已存在的行仍能加载，于是「控制台拒绝、线上照跑」。',
+          'tags 的键要匹配「小写字母开头、只含小写字母数字下划线、最长 63 字符」；不合规在写路径被拒，但已存在的行仍能加载，于是「控制台拒绝、线上照跑」。',
           'name 是空串 → 被报成 unknown（不报错）。',
         ],
       },
@@ -464,7 +472,7 @@ export default {
         effect: '命中时网关在打上游之前就返回缓存，响应头带 x-aisix-cache: hit（未命中是 miss）；上游费用和延迟都下降。',
         ifAbsent: '每个请求都打到上游，重复问题重复付费。',
         trap: 'applies_to 拼错 → 从「一个模型」静默放大到「整个环境」',
-        verify: '同一请求发两次：第二次响应头应带 x-aisix-cache: hit；指标 aisix_cache_requests_total{outcome="hit_exact"} 上升',
+        verify: '同一请求发两次：第二次响应头应带 x-aisix-cache: hit；指标 aisix_cache_requests_total 里 outcome="hit_exact" 的那条在上升',
         mis: [
           'applies_to 是自由字符串，只认 all、model:<名>、api_key:<id>，其他任何值（含空串）都被解析成「全部」。把 model: 后面的名字拼错 = 策略从「一个模型」静默放大到「整个环境」。这是本资源最危险的一处。',
           '后端选了 redis 但网关引导配置里没有 redis → 匹配的请求不被缓存，不发缓存头、状态为 disabled，只 warn 一次。',
@@ -479,7 +487,7 @@ export default {
         effect: '超限返回 429，响应带 retry-after、x-ratelimit-limit、x-ratelimit-remaining。',
         ifAbsent: '没有这一层限制（密钥和模型的内联限流仍然生效）。',
         trap: '两种形式混用整行被拒；没有每小时与每秒令牌字段',
-        verify: '压测到超限应得 429 且带 retry-after；指标 aisix_ratelimit_rejections_total{layer="policy"} 上升',
+        verify: '压测到超限应得 429 且带 retry-after；指标 aisix_ratelimit_rejections_total 里 layer="policy" 的那条在上升',
         mis: [
           '经典形式（作用范围 + 窗口）与条件形式（limits）混用 → 整行被拒，不是部分生效。',
           '经典形式漏作用对象或窗口，或条件形式给了全 0 的上限 → 整行被拒。',
