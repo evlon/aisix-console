@@ -195,6 +195,17 @@ export default {
       resolveApiKey: 'API key to map onto',
       tags: 'Cost-attribution tags (JSON)',
       tag: 'Limit by tag (JSON)',
+      // Fields of the caller key that live in its "advanced" section.
+      allowed_agents: 'A2A agents this key may reach',
+      allowed_routes: 'Passthrough routes this key may use',
+      jwt_subject: 'Bound JWT identity',
+      team_id: 'Owning team',
+      user_id: 'Owning member',
+      user_name: 'Member name (fallback)',
+      mcpAccessAllow: 'MCP tools allowed',
+      mcpAccessDeny: 'MCP tools denied',
+      mcpRateLimits: 'Per-MCP-server limits (JSON)',
+      pricing_key: 'Pricing key',
     },
 
     // ── form field help ── see the note in zh-CN.js
@@ -265,6 +276,9 @@ export default {
       },
       models: {
         label: 'Models',
+        fieldHelp: {
+          pricing_key: 'Points at a row in the pricing table (matched by name). Blank falls back to the model\'s own inline cost; with neither, the model sorts last forever under least-cost.',
+        },
         oneLiner: 'The model name you expose, and which upstream model it lands on.',
         whenNeeded: 'Every model a caller uses must be declared here once. The model field in a request is the name you write here.',
         effect: 'GET /v1/models starts returning it; putting this name in the request body model field reaches upstream.',
@@ -329,6 +343,18 @@ export default {
       },
       api_keys: {
         label: 'Caller keys',
+        fieldHelp: {
+          allowed_agents: 'Blank or * means unrestricted. List names and only those agents are reachable — by name, not by id.',
+          allowed_routes: 'The same, for passthrough routes. An unauthorised route answers 403 route_forbidden, not 404.',
+          jwt_provider: 'Which OIDC provider a JWT is verified against; it must match the provider\'s name exactly, or this key is never selected.',
+          jwt_subject: 'The identity value matched against a JWT, read from the provider\'s identity_claim. Setting a provider means setting this too.',
+          team_id: 'The owning team\'s id (not its name). Team-scoped rate limits and budgets match on it; a name attaches nothing.',
+          user_id: 'The owning member\'s id. Same: matched by id.',
+          user_name: 'Fallback for the member name when the member collection has no matching row. Blank shows unknown in metrics.',
+          mcpAccessAllow: 'One "server__tool" per line, or * for everything. This is the key\'s own layer and is intersected with the env and team policies.',
+          mcpAccessDeny: 'One per line. Deny always wins: a tool listed here cannot be rescued by any allow list.',
+          mcpRateLimits: 'JSON limiting each MCP server separately, keyed by server name. Blank adds no extra limit.',
+        },
         oneLiner: 'The credential a caller presents; the gateway database stores only its SHA-256 hash.',
         whenNeeded: 'Whenever traffic is to be let in. Without it the gateway cannot authenticate, and so cannot rate-limit or bill.',
         effect: 'Requests carrying the plaintext key start passing; GET /v1/models lists only the models this key can reach.',

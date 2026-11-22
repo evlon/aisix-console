@@ -4,9 +4,30 @@ import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
+import ResourceFacts from '../components/ResourceFacts.vue';
 import { stringify as stringifyYaml } from 'yaml';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
+
+// The one label on this page that still showed the configuration key. Same
+// resolution chain as the rest of the console: per-kind override, shared field.*,
+// then the table-column label.
+const FL = (kind, field) => {
+  const keys = [
+    `resourceCatalog.kind.${kind}.field.${field}`,
+    `resourceCatalog.field.${field}`,
+    `resourceCatalog.col.${field}`,
+  ];
+  for (const key of keys) if (te(key)) return t(key);
+  return field;
+};
+
+const FH = (kind, field) => {
+  for (const key of [`resourceCatalog.kind.${kind}.fieldHelp.${field}`, `resourceCatalog.fieldHelp.${field}`]) {
+    if (te(key)) return t(key);
+  }
+  return '';
+};
 const entries = ref([]);
 const providerKeys = ref([]);
 const allModels = ref([]); // all model display_names (for target dropdowns)
@@ -442,6 +463,10 @@ onMounted(load);
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
 
+    <!-- The same six questions every resource answers, from the same copy the
+         catalogue uses. -->
+    <ResourceFacts kind="models" />
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <h3 style="margin: 0">{{ t('models.title') }}</h3>
@@ -549,8 +574,9 @@ onMounted(load);
               <textarea v-model="form.direct.effort_mapping_text" rows="2" style="flex: 1" placeholder='{"*": "high"}' />
             </div>
             <div class="form-row">
-              <label>pricing_key</label>
+              <label>{{ FL('models', 'pricing_key') }}</label>
               <input v-model="form.direct.pricing_key" placeholder="shared pricing doc name" />
+              <p v-if="FH('models', 'pricing_key')" class="fh">{{ FH('models', 'pricing_key') }}</p>
             </div>
           </details>
         </template>
@@ -741,3 +767,20 @@ onMounted(load);
     </Modal>
   </div>
 </template>
+
+<style scoped>
+/* The label column holds Chinese field names and the help sits under the input
+   spanning both columns: a 40-character sentence in the label column would wrap
+   to four lines and bury the input. */
+.modal .form-row {
+  grid-template-columns: 200px 1fr;
+}
+
+.modal .form-row > .fh {
+  grid-column: 2;
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+</style>

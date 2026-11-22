@@ -28,12 +28,18 @@ const FILES = [
   '../src/components/ResourceFacts.vue',
   '../src/components/GatewayFeedback.vue',
   '../src/views/Resources.vue',
+  '../src/views/Policies.vue',
+  '../src/views/ApiKeys.vue',
+  '../src/views/Models.vue',
   '../src/views/Metrics.vue',
 ];
 
 // Only the blocks this suite owns; other pages' keys are exercised by their own
 // usage and would just duplicate the check.
-const OWNED_PREFIXES = ['obs.', 'fmt.', 'resources.', 'metrics.', 'resourceCatalog.', 'dashboard.'];
+const OWNED_PREFIXES = [
+  'obs.', 'fmt.', 'resources.', 'metrics.', 'resourceCatalog.', 'dashboard.',
+  'policies.', 'apiKeys.', 'models.',
+];
 
 const locales = { 'zh-CN': zh, en };
 

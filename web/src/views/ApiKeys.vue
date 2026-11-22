@@ -3,10 +3,32 @@ import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
+import ResourceFacts from '../components/ResourceFacts.vue';
 import { generateCallerKey } from '../lib/keygen.js';
 import { sha256Hex } from '../lib/sha256.js';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
+
+// Field labels and help come from the catalogue copy, the same mechanism the
+// resource catalogue and the Policies page use: per-kind override, then the
+// shared field.*, then the table-column label, then the raw key. The advanced
+// section used to show the configuration keys themselves.
+const FL = (kind, field) => {
+  const keys = [
+    `resourceCatalog.kind.${kind}.field.${field}`,
+    `resourceCatalog.field.${field}`,
+    `resourceCatalog.col.${field}`,
+  ];
+  for (const key of keys) if (te(key)) return t(key);
+  return field;
+};
+
+const FH = (kind, field) => {
+  for (const key of [`resourceCatalog.kind.${kind}.fieldHelp.${field}`, `resourceCatalog.fieldHelp.${field}`]) {
+    if (te(key)) return t(key);
+  }
+  return '';
+};
 const entries = ref([]);
 const models = ref([]);
 const mcpServers = ref([]);
@@ -15,6 +37,17 @@ const editing = ref(null);
 const saving = ref(false);
 const lastResult = ref(null);
 const generatedPlaintext = ref('');
+
+// The gateway's RateLimit dimensions. There is no per-hour or per-second TOKEN
+// limit upstream, so tpm/tpd are the only token windows.
+//
+// These MUST stay above `form`: its initializer calls emptyRateLimit(), and a
+// `const` arrow function is not hoisted. Declared below, this threw "Cannot
+// access 'emptyRateLimit' before initialization" during setup, so the whole page
+// rendered as a comment node — nothing in the build or the tests could see it,
+// and it shipped in v0.2.1.
+const RATE_DIMS = ['rpm', 'rps', 'rph', 'rpd', 'tpm', 'tpd', 'concurrency'];
+const emptyRateLimit = () => Object.fromEntries(RATE_DIMS.map((d) => [d, '']));
 
 const form = ref({
   display_name: '',
@@ -40,11 +73,6 @@ const form = ref({
   mcp_access_deny: '',
   mcp_rate_limits: [], // [{ server, rpm, rps, rph, rpd, tpm, tpd, concurrency }]
 });
-
-// The gateway's RateLimit dimensions. There is no per-hour or per-second TOKEN
-// limit upstream, so tpm/tpd are the only token windows.
-const RATE_DIMS = ['rpm', 'rps', 'rph', 'rpd', 'tpm', 'tpd', 'concurrency'];
-const emptyRateLimit = () => Object.fromEntries(RATE_DIMS.map((d) => [d, '']));
 
 const emptyAdvanced = () => ({
   allowed_agents: '',
@@ -304,6 +332,11 @@ onMounted(load);
       <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
     </div>
 
+    <!-- The same six questions every resource answers, from the same copy the
+         catalogue uses. The hint below stays: it explains the hashing behaviour,
+         which is specific to this page. -->
+    <ResourceFacts kind="api_keys" />
+
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <h3 style="margin: 0">{{ t('apiKeys.title') }}</h3>
@@ -408,35 +441,42 @@ onMounted(load);
         <details style="margin-top: 10px">
           <summary>{{ t('apiKeys.advanced') }}</summary>
           <div class="form-row">
-            <label>allowed_agents</label>
+            <label>{{ FL('api_keys', 'allowed_agents') }}</label>
             <input v-model="form.allowed_agents" placeholder="*, agent-a" />
+            <p v-if="FH('api_keys', 'allowed_agents')" class="fh">{{ FH('api_keys', 'allowed_agents') }}</p>
           </div>
           <div class="form-row">
-            <label>allowed_routes</label>
+            <label>{{ FL('api_keys', 'allowed_routes') }}</label>
             <input v-model="form.allowed_routes" placeholder="*, route-a" />
+            <p v-if="FH('api_keys', 'allowed_routes')" class="fh">{{ FH('api_keys', 'allowed_routes') }}</p>
           </div>
           <div class="form-row">
-            <label>jwt_provider</label>
+            <label>{{ FL('api_keys', 'jwt_provider') }}</label>
             <input v-model="form.jwt_provider" placeholder="oidc provider name" />
+            <p v-if="FH('api_keys', 'jwt_provider')" class="fh">{{ FH('api_keys', 'jwt_provider') }}</p>
           </div>
           <div class="form-row">
-            <label>jwt_subject</label>
+            <label>{{ FL('api_keys', 'jwt_subject') }}</label>
             <input v-model="form.jwt_subject" placeholder="external identity" />
+            <p v-if="FH('api_keys', 'jwt_subject')" class="fh">{{ FH('api_keys', 'jwt_subject') }}</p>
           </div>
           <div class="form-row">
-            <label>team_id</label>
+            <label>{{ FL('api_keys', 'team_id') }}</label>
             <input v-model="form.team_id" />
+            <p v-if="FH('api_keys', 'team_id')" class="fh">{{ FH('api_keys', 'team_id') }}</p>
           </div>
           <div class="form-row">
-            <label>user_id</label>
+            <label>{{ FL('api_keys', 'user_id') }}</label>
             <input v-model="form.user_id" />
+            <p v-if="FH('api_keys', 'user_id')" class="fh">{{ FH('api_keys', 'user_id') }}</p>
           </div>
           <div class="form-row">
-            <label>user_name</label>
+            <label>{{ FL('api_keys', 'user_name') }}</label>
             <input v-model="form.user_name" />
+            <p v-if="FH('api_keys', 'user_name')" class="fh">{{ FH('api_keys', 'user_name') }}</p>
           </div>
           <div class="form-row">
-            <label>mcp_access.allow</label>
+            <label>{{ FL('api_keys', 'mcpAccessAllow') }}</label>
             <div style="flex: 1">
               <textarea v-model="form.mcp_access_allow" rows="3" style="width: 100%" placeholder="每行一个 <server>__<tool> glob，如&#10;demo-mcp__*&#10;github__search_repositories" />
               <div style="margin-top: 4px">
@@ -444,13 +484,15 @@ onMounted(load);
                 <button v-for="s in mcpServers" :key="s" @click="form.mcp_access_allow = (form.mcp_access_allow ? form.mcp_access_allow + '\n' : '') + s + '__*'" style="margin: 2px">{{ s }}__*</button>
               </div>
             </div>
+            <p v-if="FH('api_keys', 'mcpAccessAllow')" class="fh">{{ FH('api_keys', 'mcpAccessAllow') }}</p>
           </div>
           <div class="form-row">
-            <label>mcp_access.deny</label>
+            <label>{{ FL('api_keys', 'mcpAccessDeny') }}</label>
             <textarea v-model="form.mcp_access_deny" rows="3" style="flex: 1" placeholder="每行一个 <server>__<tool> glob" />
+            <p v-if="FH('api_keys', 'mcpAccessDeny')" class="fh">{{ FH('api_keys', 'mcpAccessDeny') }}</p>
           </div>
           <div class="form-row">
-            <label>mcp_rate_limits</label>
+            <label>{{ FL('api_keys', 'mcpRateLimits') }}</label>
             <div style="flex: 1">
               <div v-for="(row, i) in form.mcp_rate_limits" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center; flex-wrap: wrap">
                 <select v-model="row.server" style="min-width: 140px">
@@ -469,6 +511,7 @@ onMounted(load);
               </div>
               <button @click="addMcpRateLimit">+ 添加服务器限额</button>
             </div>
+            <p v-if="FH('api_keys', 'mcpRateLimits')" class="fh">{{ FH('api_keys', 'mcpRateLimits') }}</p>
           </div>
         </details>
         <div class="muted" v-if="editing.display_name" style="font-size: 12px; margin-bottom: 8px">{{ t('apiKeys.immutableHint') }}</div>
@@ -484,3 +527,20 @@ onMounted(load);
     </Modal>
   </div>
 </template>
+
+<style scoped>
+/* The label column holds Chinese field names and the help sits under the input
+   spanning both columns: a 40-character sentence in the label column would wrap
+   to four lines and bury the input. */
+.modal .form-row {
+  grid-template-columns: 200px 1fr;
+}
+
+.modal .form-row > .fh {
+  grid-column: 2;
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+</style>

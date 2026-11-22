@@ -193,6 +193,17 @@ export default {
       resolveApiKey: '映射到哪把密钥',
       tags: '成本归属标签（JSON）',
       tag: '按标签限定（JSON）',
+      // Fields of the caller key that live in its "advanced" section.
+      allowed_agents: '允许调用的 A2A 智能体',
+      allowed_routes: '允许走的透传路由',
+      jwt_subject: '绑定的 JWT 身份',
+      team_id: '所属团队',
+      user_id: '所属成员',
+      user_name: '成员名（回退用）',
+      mcpAccessAllow: 'MCP 工具允许清单',
+      mcpAccessDeny: 'MCP 工具拒绝清单',
+      mcpRateLimits: '每个 MCP 服务器的限额（JSON）',
+      pricing_key: '计费键',
     },
 
     // ── form field help ──
@@ -268,6 +279,9 @@ export default {
       },
       models: {
         label: '模型',
+        fieldHelp: {
+          pricing_key: '指向计费价目里的那一行（按名字精确匹配）。留空则回落到模型自己的内联成本；两者都没有时，这个模型在最低成本排序里永远是最后。',
+        },
         oneLiner: '对外开放的模型名，以及它落到哪个上游模型上。',
         whenNeeded: '调用方要用的每个模型都得在这里声明一次。请求里的 model 字段填的就是这里的名字。',
         effect: 'GET /v1/models 开始返回它；请求体 model 填这个名字就能通到上游。',
@@ -332,6 +346,18 @@ export default {
       },
       api_keys: {
         label: '调用方密钥',
+        fieldHelp: {
+          allowed_agents: '留空或填 * 表示不限制。列了名字就只有这些智能体可达（按名字匹配，不是 id）。',
+          allowed_routes: '对象是透传路由。未授权的路由会返回 403 route_forbidden，而不是 404。',
+          jwt_provider: 'JWT 认证时用哪个 OIDC 提供方，必须与提供方的名字一致 —— 拼写不一致时永远选不到这把密钥。',
+          jwt_subject: 'JWT 里用来匹配这把密钥的身份值，取自提供方的 identity_claim。配了提供方就该同时配它。',
+          team_id: '所属团队的 id（不是名字）。团队级限流与预算按它匹配，写名字等于没挂上。',
+          user_id: '所属成员的 id。同上，按 id 匹配。',
+          user_name: '成员名的回退值：成员集合里找不到时用它。留空则指标里显示 unknown。',
+          mcpAccessAllow: '每行一条「服务器名__工具名」，或 * 表示全部。这是密钥自己那一层，会与环境策略、团队策略取交集。',
+          mcpAccessDeny: '每行一条。拒绝永远优先：命中的工具，任何允许清单都救不回来。',
+          mcpRateLimits: '按 MCP 服务器分别限额的 JSON，键是服务器名。留空表示不额外限制。',
+        },
         oneLiner: '调用方出示的凭据；网关库里只存它的 SHA-256 哈希。',
         whenNeeded: '任何要把流量放进来的时候。没有它，网关无法鉴权，也就无从限流和记账。',
         effect: '带明文 key 的请求开始通过；GET /v1/models 只列这把 key 能访问的模型。',

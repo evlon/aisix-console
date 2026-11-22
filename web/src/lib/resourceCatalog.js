@@ -264,7 +264,18 @@ export const FORM_FIELDS = {
   pricing: ['key', 'input_per_1k', 'output_per_1k'],
   budget_policy: ['fail_mode', 'closed_grace_seconds'],
   usage_accounting: ['exclude_estimated_usage'],
+  // Models' page translates its own labels; this is the one field that still
+  // showed the configuration key.
+  models: ['pricing_key'],
   teams: ['name', 'tags'],
+  // The caller key's page keeps its own labels for the common fields (they are
+  // already translated there); these are the ones that live in its advanced
+  // section, which used to show the configuration keys themselves.
+  api_keys: [
+    'allowed_agents', 'allowed_routes', 'jwt_provider', 'jwt_subject',
+    'team_id', 'user_id', 'user_name',
+    'mcpAccessAllow', 'mcpAccessDeny', 'mcpRateLimits',
+  ],
   users: ['name', 'tags'],
   // The schema is a set of mutually exclusive shapes: `tag` for scope=tag, a
   // `scope_ref` for the scopes that point at a record, and neither for org and
