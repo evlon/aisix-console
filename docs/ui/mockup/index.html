@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>资源集成 · 重新设计（设计稿）</title>
+<style>
+  /* Tokens copied verbatim from web/src/style.css, so this draft sits in the
+     product's real colour system rather than a designer's imagined one. */
+  :root {
+    --bg: #0f1117; --panel: #171a23; --border: #2a2f3a; --text: #e6e8ee;
+    --muted: #9aa3b2; --accent: #3b82f6; --green: #22c55e; --red: #ef4444;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-size: 14px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  button {
+    background: #232839; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+  }
+  .badge.ok { color: var(--green); border-color: var(--green); }
+  .badge.warn { color: var(--amber); border-color: var(--amber); }
+  .badge.err { color: var(--red); border-color: var(--red); }
+  .badge.plain { color: var(--muted); }
+  .muted { color: var(--muted); }
+  code { background: #0d0f15; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+
+  /* ---- shell: mirrors App.vue's 200px aside + content ---- */
+  .shell { display: flex; min-height: 100vh; }
+  aside { width: 200px; border-right: 1px solid var(--border); padding: 16px 12px; flex-shrink: 0; }
+  .brand { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  aside nav a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--muted); margin-bottom: 2px; }
+  aside nav a.active { background: #232839; color: var(--text); }
+  main { flex: 1; padding: 20px 24px; max-width: 1240px; }
+
+  .draftbar {
+    background: rgba(245,158,11,.1); border: 1px solid var(--amber); color: #fcd34d;
+    border-radius: 6px; padding: 8px 12px; margin-bottom: 16px; font-size: 13px;
+  }
+
+  /* ---- view header ---- */
+  .vhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 4px; }
+  h1 { font-size: 20px; margin: 0; }
+  .vsub { color: var(--muted); margin: 6px 0 18px; }
+
+  /* ---- gateway feedback: the answer to "why did nothing happen" ---- */
+  .strip {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 14px; margin-bottom: 18px; font-size: 13px;
+  }
+  .strip.bad { border-color: var(--red); background: rgba(239,68,68,.06); }
+  .rejected { border: 1px solid var(--red); border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; background: rgba(239,68,68,.06); }
+  .rejected table { margin-top: 8px; }
+  .rejected td, .rejected th { font-size: 13px; }
+
+  /* ---- first-run guide ---- */
+  .guide {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 12px 16px; margin-bottom: 18px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .guide .step { display: flex; align-items: center; gap: 6px; }
+  .guide .n {
+    width: 20px; height: 20px; border-radius: 50%; background: #232839; border: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; display: flex; align-items: center; justify-content: center;
+  }
+  .guide .arrow { color: var(--muted); }
+
+  /* ---- the three failure modes, stated once ---- */
+  .legend { border: 1px solid var(--border); border-radius: 8px; padding: 4px 14px; margin-bottom: 22px; background: var(--panel); }
+  .legend summary { cursor: pointer; padding: 8px 0; font-size: 13px; color: var(--muted); }
+  .legend .item { display: grid; grid-template-columns: 150px 1fr; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .legend .item .t { font-weight: 600; }
+
+  /* ---- group ---- */
+  .group { margin-bottom: 26px; }
+  .ghead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .ghead h2 { font-size: 15px; margin: 0; }
+  .gnum { color: var(--muted); font-size: 12px; }
+  .gdesc { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+
+  /* ---- cards ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+  .rcard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; display: flex; flex-direction: column; cursor: pointer;
+  }
+  .rcard:hover { border-color: #3d4657; }
+  .rtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .rname { font-weight: 600; }
+  .rone { color: var(--muted); margin: 6px 0 10px; }
+  .fact { display: grid; grid-template-columns: 44px 1fr; gap: 4px 8px; font-size: 13px; align-items: start; }
+  .fact dt { color: var(--muted); margin: 0; }
+  .fact dd { margin: 0; }
+  .trap { color: #fcd34d; }
+  .rfoot {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center; font-size: 12px;
+  }
+  .rfoot .own { color: var(--muted); }
+  .go { color: var(--accent); }
+
+  /* ---- detail ---- */
+  .crumb { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .band { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 16px; margin-bottom: 18px; }
+  .band .row { display: grid; grid-template-columns: 92px 1fr; gap: 8px 14px; padding: 9px 0; }
+  .band .row + .row { border-top: 1px solid var(--border); }
+  .band dt { color: var(--muted); margin: 0; font-size: 13px; }
+  .band dd { margin: 0; }
+  .band .sub { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+  .band .sub:last-child { margin-bottom: 0; }
+  .band .sub > .badge { flex: 0 0 108px; text-align: center; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.acts { white-space: nowrap; }
+
+  /* ---- drawer ---- */
+  .mask { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; justify-content: flex-end; z-index: 900; }
+  .drawer { background: var(--panel); border-left: 1px solid var(--border); width: min(600px, 94vw); height: 100%; overflow: auto; padding: 20px; }
+  .frow { margin-bottom: 18px; }
+  .frow .lab { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+  .frow .lab .req { color: var(--red); }
+  .frow .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; line-height: 1.55; }
+  .frow input, .frow select, .frow textarea {
+    background: #0d0f15; color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; width: 100%;
+  }
+  .fsec { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin: 22px 0 10px; }
+  .drawer .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+  .drawer .warnnote {
+    border: 1px solid var(--amber); background: rgba(245,158,11,.08); color: #fcd34d;
+    border-radius: 6px; padding: 9px 12px; font-size: 12px; line-height: 1.55; margin-bottom: 18px;
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">AISIX <span class="muted" style="font-weight:400">Console</span></div>
+    <nav id="nav"></nav>
+  </aside>
+  <main>
+    <div class="draftbar">设计稿 · 图中条目数与网关状态为示意数据，不是真实网关</div>
+    <div id="view"></div>
+  </main>
+</div>
+<script src="catalog.js"></script>
+<script>
+const C = window.CATALOG;
+const NAV = ['总览', '上游密钥', '模型', '调用方密钥', '策略', '资源集成', 'Playground', '密钥', '原始 YAML', '设置', '用量'];
+
+const MODE = {
+  file: { label: '整份文件被拒', cls: 'err' },
+  row: { label: '仅此行被丢弃', cls: 'warn' },
+  silent: { label: '静默不生效', cls: 'plain' },
+};
+
+// ?rejected=2 makes the draft show the "the gateway dropped N rows" state, so
+// the design for the failure path is reviewable and not just described.
+const Q = new URLSearchParams(location.search);
+const REJECTED = Number(Q.get('rejected') || 0);
+const REJECTED_ROWS = [
+  { kind: 'models', id: '3f2a91c4-…', err: 'schema validation failed; skipping (incompatible row): /routing: missing property "targets"' },
+  { kind: 'guardrail_attachments', id: 'b71d0e55-…', err: 'semantic validation failed: priority is required' },
+];
+
+function statusBadge(k) {
+  if (k.count === 0) return '<span class="badge plain">未配置</span>';
+  if (k.alert) return `<span class="badge warn">${k.count} 条 · 待处理</span>`;
+  return `<span class="badge ok">${k.count} 条</span>`;
+}
+
+// The console's own "已保存" is not evidence that the gateway loaded the row.
+// This strip is the missing feedback loop.
+function strip() {
+  if (REJECTED > 0) {
+    return `<div class="rejected">
+      <strong>网关拒绝了 ${REJECTED} 行配置</strong>
+      <span class="muted">—— 它们在控制台里是「已保存」状态，但网关没有加载，因此没有任何效果。</span>
+      <table>
+        <thead><tr><th>资源类型</th><th>资源 ID</th><th>网关给的原因</th></tr></thead>
+        <tbody>${REJECTED_ROWS.slice(0, REJECTED).map((r) => `<tr><td>${r.kind}</td><td><code>${r.id}</code></td><td>${r.err}</td></tr>`).join('')}</tbody>
+      </table>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">来源：网关 GET /status/config 的 rejected[] 与 partially_compatible[]。控制台目前只在「总览」页显示这两张表。</p>
+    </div>`;
+  }
+  return `<div class="strip">
+    <span class="badge ok">网关 synced</span>
+    <span class="muted">文件 36 条 · 本次加载全部通过 · 无被拒行</span>
+    <span style="margin-left:auto" class="muted">最后重载 09:41</span>
+  </div>`;
+}
+
+function legend() {
+  return `<details class="legend">
+    <summary>配错了会怎样？网关有三种反应，后果差很多 —— 展开看区别</summary>
+    ${C.failLegend.map((f) => `<div class="item">
+      <span class="t"><span class="badge ${MODE[f.mode].cls}">${f.label}</span></span>
+      <span class="muted">${f.text}</span>
+    </div>`).join('')}
+  </details>`;
+}
+
+function guide() {
+  const steps = ['provider_keys', 'models', 'api_keys', 'observability_exporters'];
+  const chips = steps.map((key, i) => {
+    const k = C.kinds.find((x) => x.key === key);
+    return `<a class="step" href="#/k/${key}"><span class="n">${i + 1}</span>${k.name}</a>`;
+  }).join('<span class="arrow">→</span>');
+  return `<div class="guide">
+    <span><strong>第一次配置</strong> <span class="muted">按这个顺序走通一条链路：</span></span>
+    ${chips}
+    <span class="muted">走通之后，再回来配「治理」和「计量」。</span>
+  </div>`;
+}
+
+function renderCatalog() {
+  const total = C.kinds.length;
+  const configured = C.kinds.filter((k) => k.count > 0).length;
+  const entries = C.kinds.reduce((a, k) => a + k.count, 0);
+  const groups = C.groups.map((g) => {
+    const kinds = C.kinds.filter((k) => k.group === g.id);
+    const n = kinds.filter((k) => k.count > 0).length;
+    return `<section class="group">
+      <div class="ghead"><h2>${g.name}</h2><span class="gnum">${kinds.length} 种 · 已配 ${n}</span></div>
+      <p class="gdesc">${g.desc}</p>
+      <div class="grid">${kinds.map(card).join('')}</div>
+    </section>`;
+  }).join('');
+  return `
+    <div class="vhead">
+      <div><h1>资源集成</h1></div>
+      <div class="muted">${total} 种资源 · 已配置 ${configured} 种 / 共 ${entries} 条 &nbsp; <a href="#/raw">原始 YAML</a></div>
+    </div>
+    <p class="vsub">网关能提供的全部能力都列在这里。每张卡片先说明它解决什么问题、配了会有什么效果，再进去配置。</p>
+    ${strip()}
+    ${guide()}
+    ${legend()}
+    ${groups}`;
+}
+
+function card(k) {
+  const owner = k.ownPage ? `在「${k.ownPage}」页维护` : '在本页维护';
+  const silent = (k.misconfig || []).find((m) => m.mode === 'silent');
+  void silent;
+  return `<article class="rcard" onclick="location.hash='#/k/${k.key}'">
+    <div class="rtop"><span class="rname">${k.name}</span>${statusBadge(k)}</div>
+    <p class="rone">${k.oneLiner}</p>
+    <dl class="fact">
+      <dt>作用</dt><dd>${k.effect}</dd>
+      <dt>不配</dt><dd class="muted">${k.ifAbsent}</dd>
+      ${C.traps[k.key] ? `<dt>坑</dt><dd><span class="trap">${C.traps[k.key]}</span></dd>` : ''}
+    </dl>
+    <div class="rfoot"><span class="own">${owner}${k.rawOnly ? ' · <span class="badge plain" style="padding:1px 6px">只有原始 YAML</span>' : ''}</span><span class="go">${k.ownPage ? '前往 →' : '管理 →'}</span></div>
+  </article>`;
+}
+
+function renderDetail(key) {
+  const k = C.kinds.find((x) => x.key === key);
+  if (!k) return '<p>未知资源</p>';
+  const g = C.groups.find((x) => x.id === k.group);
+  const rows = (k.sample || []).map((e) => `<tr>${k.cols.map((c) => `<td>${e[c] ?? '—'}</td>`).join('')}
+      <td class="acts"><button style="margin-right:6px">编辑</button><button style="background:transparent;border-color:var(--red);color:var(--red)">删除</button></td></tr>`).join('');
+  const mis = (k.misconfig || []).map((m) => `<div class="sub">
+      <span class="badge ${MODE[m.mode].cls}">${MODE[m.mode].label}</span>
+      <span>${m.text}</span>
+    </div>`).join('');
+  return `
+    <div class="crumb"><a href="#/">资源集成</a> / ${g.name} / ${k.name}</div>
+    <div class="dhead">
+      <h1>${k.name} ${statusBadge(k)}</h1>
+      <div><button class="primary" onclick="openDrawer('${k.key}')">+ 新增</button></div>
+    </div>
+    <dl class="band">
+      <div class="row"><dt>它是什么</dt><dd>${k.oneLiner}</dd></div>
+      <div class="row"><dt>什么时候要</dt><dd>${k.whenNeeded}</dd></div>
+      <div class="row"><dt>配了会怎样</dt><dd>${k.effect}</dd></div>
+      <div class="row"><dt>不配会怎样</dt><dd>${k.ifAbsent}</dd></div>
+      <div class="row"><dt>和谁有关</dt><dd>${(k.relations || []).map((r) => `<div>· ${r}</div>`).join('') || '—'}</dd></div>
+      ${mis ? `<div class="row"><dt>配错会怎样</dt><dd>${mis}</dd></div>` : ''}
+      ${k.verify ? `<div class="row"><dt>怎么验证</dt><dd><code>${k.verify}</code></dd></div>` : ''}
+      ${k.rawOnly ? `<div class="row"><dt>注意</dt><dd class="muted">该资源目前没有表单，只能在「原始 YAML」里编辑。见设计文档「实施计划」。</dd></div>` : ''}
+    </dl>
+    <div class="card">
+      <table>
+        <thead><tr>${k.cols.map((c) => `<th>${k.colLabels[c] || c}</th>`).join('')}<th>操作</th></tr></thead>
+        <tbody>
+          ${rows || `<tr><td colspan="${k.cols.length + 1}" class="muted">${k.empty || '暂无条目。点击「新增」创建。'}</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function openDrawer(key) {
+  const k = C.kinds.find((x) => x.key === key);
+  const fields = (k.fields || []).map((f) => `
+    <div class="frow">
+      <div class="lab"><span>${f.label}</span>${f.required ? '<span class="req">*</span>' : ''}
+        <span class="muted" style="font-size:12px">${f.field}</span></div>
+      ${f.type === 'select'
+        ? `<select>${f.options.map((o) => `<option>${o}</option>`).join('')}</select>`
+        : `<input placeholder="${f.ph || ''}" />`}
+      <p class="hint">${f.help}</p>
+    </div>`).join('');
+  const silent = (k.misconfig || []);
+  const el = document.createElement('div');
+  el.className = 'mask';
+  el.onclick = (e) => { if (e.target === el) el.remove(); };
+  el.innerHTML = `<div class="drawer">
+    <h1 style="font-size:17px">新增 ${k.name}</h1>
+    <p class="muted" style="margin:6px 0 16px">${k.oneLiner}</p>
+    ${C.traps[k.key] ? `<div class="warnnote"><strong>最常见的坑：</strong>${C.traps[k.key]}</div>` : ''}
+    ${silent.length ? `<details class="legend" style="background:transparent;margin-bottom:16px">
+      <summary>填错了会怎样（${silent.length} 种）</summary>
+      ${silent.map((m) => `<div class="item" style="grid-template-columns:108px 1fr">
+        <span class="t"><span class="badge ${MODE[m.mode].cls}">${MODE[m.mode].label}</span></span>
+        <span class="muted">${m.text}</span>
+      </div>`).join('')}
+    </details>` : ''}
+    <div class="fsec">基本</div>
+    ${fields || '<p class="muted">该资源没有表单（只能走原始 YAML）。</p>'}
+    <div class="foot"><button onclick="this.closest('.mask').remove()">取消</button>
+      <button class="primary">保存并重载网关</button></div>
+  </div>`;
+  document.body.appendChild(el);
+}
+
+function render() {
+  const h = location.hash || '#/';
+  const m = h.match(/^#\/k\/(.+)$/);
+  document.getElementById('view').innerHTML = m ? renderDetail(m[1]) : renderCatalog();
+  document.getElementById('nav').innerHTML = NAV.map((n, i) => `<a href="#" class="${i === 5 ? 'active' : ''}">${n}</a>`).join('');
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', render);
+render();
+</script>
+</body>
+</html>

@@ -1,11 +1,21 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { api } from '../api.js';
 import Modal from '../components/Modal.vue';
 import RawYamlEditor from '../components/RawYamlEditor.vue';
 import ExporterForm from '../components/ExporterForm.vue';
 import ExporterHealth from '../components/ExporterHealth.vue';
+import GatewayFeedback from '../components/GatewayFeedback.vue';
+import ResourceCard from '../components/ResourceCard.vue';
+import ResourceFacts from '../components/ResourceFacts.vue';
+import { useStatusStore } from '../stores/status.js';
+import {
+  COLS,
+  GROUPS,
+  KINDS as CATALOG_KINDS,
+  OWN_PAGE_NAV,
+} from '../lib/resourceCatalog.js';
 import {
   defaultDraft as defaultExporterDraft,
   draftFromEntry as draftFromExporterEntry,
@@ -16,39 +26,29 @@ import {
 } from '../lib/exporterTargets.js';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
+const status = useStatusStore();
 
-const KINDS = [
-  { key: 'mcp_servers', label: () => t('resources.kindMcp') },
-  { key: 'a2a_agents', label: () => t('resources.kindA2a') },
-  { key: 'oidc_providers', label: () => t('resources.kindOidc') },
-  { key: 'observability_exporters', label: () => t('resources.kindObs') },
-  { key: 'claim_mappings', label: () => t('resources.kindClaim') },
-  { key: 'guardrail_attachments', label: () => t('resources.kindGuardrailAttach') },
-  { key: 'passthrough_routes', label: () => t('resources.kindPassthrough') },
-  { key: 'mcp_auth_settings', label: () => t('resources.kindMcpAuth') },
-  // Newer aisix collections. These have complex or composite shapes upstream,
-  // so the form does not model them: they are listed here and edited through
-  // the raw-YAML tab, which round-trips the entry exactly.
-  { key: 'teams', label: () => t('resources.kindTeams') },
-  { key: 'users', label: () => t('resources.kindUsers') },
-  { key: 'pricing', label: () => t('resources.kindPricing') },
-  { key: 'budgets', label: () => t('resources.kindBudgets') },
-  { key: 'budget_policy', label: () => t('resources.kindBudgetPolicy') },
-  { key: 'usage_accounting', label: () => t('resources.kindUsageAccounting') },
-  { key: 'mcp_policies', label: () => t('resources.kindMcpPolicies') },
-];
+// The catalogue structure (groups, owning pages, columns, failure modes) lives
+// in web/src/lib/resourceCatalog.js and the copy in i18n under
+// `resourceCatalog.*`. This view keeps only what the editor needs on top.
+const KINDS = CATALOG_KINDS.map((k) => ({
+  ...k,
+  label: () => t(`resourceCatalog.kind.${k.key}.label`),
+}));
 
 // Kinds with no form branch: the modal opens on the raw-YAML tab.
-const RAW_YAML_ONLY = new Set([
-  'teams',
-  'users',
-  'pricing',
-  'budgets',
-  'budget_policy',
-  'usage_accounting',
-  'mcp_policies',
-]);
+const RAW_YAML_ONLY = new Set(CATALOG_KINDS.filter((k) => k.rawOnly).map((k) => k.key));
+
+// The four steps that get one model call through the gateway end to end — the
+// answer to "where do I start", which a wall of buttons never gave.
+const GUIDE = ['provider_keys', 'models', 'api_keys', 'observability_exporters'];
+
+// The three ways the gateway reacts to a bad resource, worst first. The last
+// one is the reason this page says anything about failure at all.
+const FAIL_MODES = ['file', 'row', 'silent'];
+const MODE_CLS = { file: 'err', row: 'warn', silent: 'plain' };
+
 
 // Starting point for a new entry, so the raw tab is not an empty box. Only the
 // fields upstream requires are pre-filled; the rest is left to the operator.
@@ -128,6 +128,11 @@ const saving = ref(false);
 const lastResult = ref(null);
 const tab = ref('form');
 const rawText = ref('');
+// Two-level view: the catalogue of every collection, then one resource's
+// detail. Own-page kinds still open their detail — that is how the six
+// questions stay reachable for all 21 — but their detail links out instead of
+// offering an editor, so each resource still has exactly one place to edit.
+const view = ref('catalog');
 
 const kindOf = (key) => KINDS.find((k) => k.key === key);
 
@@ -512,11 +517,37 @@ async function load() {
   }
 }
 
-function switchKind() {
+function backToCatalog() {
+  view.value = 'catalog';
+  editing.value = null;
+  lastResult.value = null;
+}
+
+function openDetail(key) {
+  const rec = kindOf(key);
+  activeKind.value = key;
+  view.value = 'detail';
   lastResult.value = null;
   editing.value = null;
-  load();
+  // Own-page kinds have no table on this page, so there is nothing to fetch.
+  if (!rec?.ownPage) load();
 }
+
+// Per-collection row counts come from /api/status, which already returns them
+// (server/src/routes/status.js), so the catalogue costs no extra request.
+const counts = computed(() => status.counts ?? {});
+const config = computed(() => status.config);
+const rowCount = computed(() => Object.values(counts.value).reduce((a, n) => a + (n || 0), 0));
+const configuredKinds = computed(() => KINDS.filter((k) => (counts.value[k.key] || 0) > 0).length);
+const groupsView = computed(() =>
+  GROUPS.map((id) => {
+    const kinds = KINDS.filter((k) => k.group === id);
+    return { id, kinds, configured: kinds.filter((k) => (counts.value[k.key] || 0) > 0).length };
+  })
+);
+const guideKinds = computed(() => GUIDE.map((key) => kindOf(key)).filter(Boolean));
+const activeRec = computed(() => kindOf(activeKind.value) ?? KINDS[0]);
+const ownPageName = (rec) => (rec?.ownPage ? t(`app.nav.${OWN_PAGE_NAV[rec.ownPage]}`) : '');
 
 async function save() {
   const k = activeKind.value;
@@ -604,43 +635,17 @@ async function remove(e) {
 }
 
 function tableCols() {
-  const k = activeKind.value;
-  if (k === 'mcp_servers') return ['name', 'type', 'url', 'auth_type', 'enabled'];
-  if (k === 'a2a_agents') return ['name', 'url', 'protocol_version', 'auth_type', 'enabled'];
-  if (k === 'oidc_providers') return ['name', 'issuer', 'identity_claim', 'enabled'];
-  if (k === 'observability_exporters') return ['name', 'destination', 'content', 'enabled'];
-  if (k === 'guardrail_attachments') return ['guardrail_id', 'scope_type', 'scope_id', 'priority', 'enabled'];
-  if (k === 'passthrough_routes') return ['name', 'path_prefix', 'target_url', 'enabled'];
-  if (k === 'mcp_auth_settings') return ['resource_url', 'anonymous'];
-  if (k === 'teams' || k === 'users') return ['name'];
-  if (k === 'pricing') return ['key', 'input_per_1k', 'output_per_1k'];
-  if (k === 'budgets') return ['scope', 'scope_ref', 'period'];
-  if (k === 'budget_policy') return ['fail_mode', 'closed_grace_seconds'];
-  if (k === 'usage_accounting') return ['exclude_estimated_usage'];
-  if (k === 'mcp_policies') return ['scope', 'scope_ref', 'enabled'];
-  return ['name', 'jwt_provider', 'priority', 'enabled'];
+  return COLS[activeKind.value] ?? [];
 }
 
-// Column headers. Custom columns used to render their raw field name, which is
-// how a Chinese UI ended up showing "DESTINATION"/"CONTENT".
-const COL_LABELS = {
-  destination: 'obs.colDestination',
-  content: 'obs.colContent',
-  key: 'resources.colPricingKey',
-  scope: 'resources.colScope',
-  scope_ref: 'resources.colScopeRef',
-  period: 'resources.colPeriod',
-  input_per_1k: 'resources.colInputPer1k',
-  output_per_1k: 'resources.colOutputPer1k',
-  fail_mode: 'resources.colFailMode',
-  closed_grace_seconds: 'resources.colGraceSeconds',
-  exclude_estimated_usage: 'resources.colExcludeEstimated',
-};
-function colLabel(c) {
-  if (c === 'display_name' || c === 'name') return t('common.name');
-  if (c === 'enabled' || c === 'anonymous') return t('common.status');
-  if (COL_LABELS[c]) return t(COL_LABELS[c]);
-  return c;
+// Column headers come from `resourceCatalog.col.<field>`. The old code fell
+// back to the raw field name, which is how a Chinese UI ended up showing
+// "AUTH_TYPE" and "DESTINATION". web/test/resourceCatalog.test.js asserts every
+// field named in COLS has a label in both locales, so that fallback cannot come
+// back silently — and if one ever slips through, a field name beats a blank.
+function colLabel(field) {
+  const key = `resourceCatalog.col.${field}`;
+  return te(key) ? t(key) : field;
 }
 
 function cell(e, col) {
@@ -666,50 +671,123 @@ onMounted(load);
 
 <template>
   <div>
-    <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap">
-      <button
-        v-for="k in KINDS"
-        :key="k.key"
-        :class="{ primary: activeKind === k.key }"
-        @click="activeKind = k.key; switchKind()"
-      >
-        {{ k.label() }}
-      </button>
-    </div>
-
-    <div v-if="lastResult && !lastResult.ok" class="error-box">
-      <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
-    </div>
-
-    <ExporterHealth v-if="activeKind === 'observability_exporters'" />
-
-    <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <h3 style="margin: 0">{{ kindOf(activeKind).label() }}</h3>
-        <button class="primary" @click="openCreate">+ {{ t('common.add') }}</button>
+    <!-- ── the catalogue: everything the gateway can be told to do ── -->
+    <template v-if="view === 'catalog'">
+      <!-- The page title comes from the shell (App.vue renders the route's
+           titleKey), so this view does not repeat it. -->
+      <div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px">
+        <span class="muted">
+          {{ t('resourceCatalog.summaryKinds', { total: KINDS.length, configured: configuredKinds, entries: rowCount }) }}
+          &nbsp; <router-link to="/raw">{{ t('resourceCatalog.viewRaw') }}</router-link>
+        </span>
       </div>
-      <p class="muted" style="margin-bottom: 0">{{ t('resources.hint') }}</p>
-      <table style="margin-top: 12px">
-        <thead>
-          <tr>
-            <th v-for="c in tableCols()" :key="c">{{ colLabel(c) }}</th>
-            <th>{{ t('common.actions') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="!loading && !entries.length">
-            <td :colspan="tableCols().length + 1" class="muted">{{ t('resources.empty') }}</td>
-          </tr>
-          <tr v-for="(e, i) in entries" :key="i">
-            <td v-for="c in tableCols()" :key="c">{{ cell(e, c) }}</td>
-            <td>
-              <button style="margin-right: 6px" @click="openEdit(e)">{{ t('common.edit') }}</button>
-              <button class="danger" @click="remove(e)">{{ t('common.delete') }}</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <p class="muted" style="margin: 6px 0 18px">{{ t('resourceCatalog.intro') }}</p>
+
+      <GatewayFeedback :config="config" :row-count="rowCount" />
+
+      <div class="guide">
+        <span>
+          <strong>{{ t('resourceCatalog.guideTitle') }}</strong>
+          <span class="muted">{{ t('resourceCatalog.guideHint') }}</span>
+        </span>
+        <template v-for="(k, i) in guideKinds" :key="k.key">
+          <span v-if="i" class="muted">→</span>
+          <a href="#" @click.prevent="openDetail(k.key)">{{ k.label() }}</a>
+        </template>
+        <span class="muted">{{ t('resourceCatalog.guideTail') }}</span>
+      </div>
+
+      <details class="legend">
+        <summary>{{ t('resourceCatalog.legendTitle') }}</summary>
+        <div v-for="m in FAIL_MODES" :key="m" class="item">
+          <span><span class="badge" :class="MODE_CLS[m]">{{ t(`resourceCatalog.fail.${m}.label`) }}</span></span>
+          <span class="muted">{{ t(`resourceCatalog.fail.${m}.text`) }}</span>
+        </div>
+      </details>
+
+      <section v-for="g in groupsView" :key="g.id" class="group">
+        <div class="ghead">
+          <h2>{{ t(`resourceCatalog.group.${g.id}.name`) }}</h2>
+          <span class="muted">
+            {{ t('resourceCatalog.groupCount', { kinds: g.kinds.length, configured: g.configured }) }}
+          </span>
+        </div>
+        <p class="muted gdesc">{{ t(`resourceCatalog.group.${g.id}.desc`) }}</p>
+        <div class="grid">
+          <ResourceCard
+            v-for="k in g.kinds"
+            :key="k.key"
+            :kind="k.key"
+            :count="counts[k.key] || 0"
+            :own-page="k.ownPage"
+            :own-page-name="ownPageName(k)"
+            :raw-only="!!k.rawOnly"
+            @open="openDetail(k.key)"
+          />
+        </div>
+      </section>
+    </template>
+
+    <!-- ── one resource: the six questions, then its entries ── -->
+    <template v-else>
+      <div class="muted" style="margin-bottom: 10px">
+        <a href="#" @click.prevent="backToCatalog">{{ t('resourceCatalog.back') }}</a>
+        / {{ t(`resourceCatalog.group.${activeRec.group}.name`) }}
+        / {{ activeRec.label() }}
+      </div>
+
+      <div class="dhead">
+        <h2 style="margin: 0; font-size: 17px">
+          {{ activeRec.label() }}
+          <span v-if="(counts[activeKind] || 0) > 0" class="badge ok">
+            {{ t('resourceCatalog.statusCount', { n: counts[activeKind] }) }}
+          </span>
+          <span v-else class="badge plain">{{ t('resourceCatalog.statusUnset') }}</span>
+          <span v-if="activeRec.rawOnly" class="badge plain">{{ t('resourceCatalog.rawOnlyBadge') }}</span>
+        </h2>
+        <button v-if="!activeRec.ownPage" class="primary" @click="openCreate">+ {{ t('common.add') }}</button>
+      </div>
+
+      <div v-if="lastResult && !lastResult.ok" class="error-box">
+        <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
+      </div>
+
+      <GatewayFeedback :config="config" :row-count="rowCount" />
+
+      <ResourceFacts :kind="activeKind" :raw-only="!!activeRec.rawOnly" />
+
+      <ExporterHealth v-if="activeKind === 'observability_exporters'" />
+
+      <div v-if="activeRec.ownPage" class="card muted">
+        {{ t('resourceCatalog.ownedElsewhere', { page: ownPageName(activeRec) }) }}
+        <router-link :to="activeRec.ownPage" style="margin-left: 8px">
+          {{ t('resourceCatalog.goTo') }} →
+        </router-link>
+      </div>
+
+      <div v-else class="card">
+        <table>
+          <thead>
+            <tr>
+              <th v-for="c in tableCols()" :key="c">{{ colLabel(c) }}</th>
+              <th>{{ t('common.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="!loading && !entries.length">
+              <td :colspan="tableCols().length + 1" class="muted">{{ t('resources.empty') }}</td>
+            </tr>
+            <tr v-for="(e, i) in entries" :key="i">
+              <td v-for="c in tableCols()" :key="c">{{ cell(e, c) }}</td>
+              <td>
+                <button style="margin-right: 6px" @click="openEdit(e)">{{ t('common.edit') }}</button>
+                <button class="danger" @click="remove(e)">{{ t('common.delete') }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
 
     <Modal v-if="editing !== null" :title="(editing.original ? t('resources.edit') : t('resources.add')) + ' — ' + kindOf(activeKind).label()" @close="editing = null">
       <div style="margin-bottom: 12px">
@@ -1148,3 +1226,78 @@ onMounted(load);
     </Modal>
   </div>
 </template>
+
+<style scoped>
+/* Catalogue layout. Kept local to the view: nothing else renders cards. */
+.dhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* First-run path: a wall of 21 capabilities still needs an entry point. */
+.guide {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.legend {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 14px;
+  margin-bottom: 20px;
+  background: var(--panel);
+}
+.legend summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.legend .item {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.legend .badge {
+  white-space: nowrap;
+}
+
+.group {
+  margin-bottom: 24px;
+}
+.ghead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.ghead h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.gdesc {
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+</style>

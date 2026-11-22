@@ -1,5 +1,11 @@
 // AISIX Console — UI strings (en).
+//
+// See the note in zh-CN.js: the resource-catalogue copy is a separate module,
+// spread in here so both locales expose the same key set.
+import resourceCatalog from './resource-catalog.en.js';
+
 export default {
+  ...resourceCatalog,
   app: {
     title: 'AISIX Console',
     nav: {
@@ -60,10 +66,19 @@ export default {
     source: 'Config source',
     appliedAt: 'Applied at',
     rejected: 'Rejected resources',
+    resourceKind: 'Resource kind',
     reason: 'Reason',
     partialCompat: 'Partially compatible fields',
     field: 'Field',
     count: 'Count',
+    // Gateway feedback strip — see the note in zh-CN.js.
+    feedbackSynced: 'Gateway synced',
+    effectChecks: 'Effect self-check',
+    feedbackLoadOk: '{n} rows in the file · this load passed · no rejected rows',
+    rejectedHeadline: 'The gateway rejected {n} rows',
+    rejectedExplain: '— the console shows them as saved, but the gateway did not load them, so they have no effect.',
+    rejectedSource: 'Source: rejected[] and partially_compatible[] from the gateway\'s GET /status/config.',
+    rejectedFixHint: 'Fix the cause below and save again. A rejected row had no effect on the gateway at all.',
     modelHealth: 'Model health',
     noModelData: 'No data (gateway offline or no models configured)',
     checkResult: 'Last check',
@@ -297,40 +312,17 @@ export default {
     choose: 'Select…',
   },
   resources: {
-    title: 'Resources',
-    hint: 'Manage integration resources: MCP servers, A2A agents, OIDC providers, observability exporters and claim mappings.',
+    // See the note in zh-CN.js: `title` duplicated the shell's heading and the
+    // old `hint` named 5 of the 15 kinds the page displayed, so the
+    // per-resource copy moved to `resourceCatalog.*`.
     empty: 'No entries yet. Click Add to create one.',
     tabForm: 'Form',
     tabRaw: 'Raw YAML',
     add: 'Add',
     edit: 'Edit',
     chooseKey: 'Select an API key…',
-    kindMcp: 'MCP Servers',
-    kindA2a: 'A2A Agents',
-    kindOidc: 'OIDC Providers',
-    kindObs: 'Observability Exporters',
-    kindClaim: 'Claim Mappings',
-    kindGuardrailAttach: 'Guardrail Attachments',
-    kindPassthrough: 'Passthrough Routes',
-    kindMcpAuth: 'MCP Auth Settings',
-    kindTeams: 'Teams',
-    kindUsers: 'Members',
-    kindPricing: 'Pricing',
-    kindBudgets: 'Budgets',
-    kindBudgetPolicy: 'Budget policy',
-    kindUsageAccounting: 'Usage accounting',
-    kindMcpPolicies: 'MCP access policies',
     useRawYaml:
       'This resource type has a complex shape — edit it through the “Raw YAML” tab, which round-trips the entry exactly.',
-    colPricingKey: 'Pricing key',
-    colScope: 'Scope',
-    colScopeRef: 'Scope ref',
-    colPeriod: 'Period',
-    colInputPer1k: 'Input /1K',
-    colOutputPer1k: 'Output /1K',
-    colFailMode: 'Fail mode',
-    colGraceSeconds: 'Grace (s)',
-    colExcludeEstimated: 'Exclude estimated usage',
   },
   playground: {
     title: 'Playground',

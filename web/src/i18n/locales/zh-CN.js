@@ -1,5 +1,14 @@
 // AISIX Console — UI strings (zh-CN).
+//
+// The resource-catalogue copy is large and lives in its own module, spread in
+// here so `t('resourceCatalog.…')` works like any other key. web/test/
+// resourceCatalog.test.js checks it against the structure in
+// web/src/lib/resourceCatalog.js, and web/test/i18n.test.js checks that the
+// zh-CN and en key sets match.
+import resourceCatalog from './resource-catalog.zh-CN.js';
+
 export default {
+  ...resourceCatalog,
   app: {
     title: 'AISIX 控制台',
     nav: {
@@ -61,10 +70,21 @@ export default {
     source: '配置源',
     appliedAt: '应用时间',
     rejected: '被拒绝的资源',
+    resourceKind: '资源类型',
     reason: '原因',
     partialCompat: '部分兼容字段',
     field: '字段',
     count: '数量',
+    // Gateway feedback strip, shared by the dashboard and the resource
+    // catalogue. A save reporting "saved" is not evidence the gateway loaded
+    // the row — these strings are the missing half of that loop.
+    feedbackSynced: '网关已同步',
+    effectChecks: '生效自检',
+    feedbackLoadOk: '文件 {n} 条 · 本次加载全部通过 · 无被拒行',
+    rejectedHeadline: '网关拒绝了 {n} 行配置',
+    rejectedExplain: '—— 它们在控制台里是「已保存」状态，但网关没有加载，因此没有任何效果。',
+    rejectedSource: '来源：网关 GET /status/config 的 rejected[] 与 partially_compatible[]。',
+    rejectedFixHint: '按下面的原因修正后重新保存。被拒的行在网关侧完全没有生效。',
     modelHealth: '模型健康',
     noModelData: '暂无数据（网关离线或未配置模型）',
     checkResult: '检查结果',
@@ -298,39 +318,18 @@ export default {
     choose: '选择…',
   },
   resources: {
-    title: '资源集成',
-    hint: '管理集成类资源：MCP 服务器、A2A 智能体、OIDC 提供方、可观测性导出器、Claim 映射。',
+    // `hint`, `title` and the kindXxx/colXxx labels used to live here. The
+    // title came from the shell (App.vue renders the route's titleKey) and the
+    // hint was the page's only explanation and it named five of the fifteen
+    // kinds on the page, so both are gone; per-resource copy and column labels
+    // now live under `resourceCatalog.*` in resource-catalog.zh-CN.js.
     empty: '暂无条目。点击「新增」创建。',
     tabForm: '表单',
     tabRaw: '原始 YAML',
     add: '新增',
     edit: '编辑',
     chooseKey: '选择调用方密钥…',
-    kindMcp: 'MCP 服务器',
-    kindA2a: 'A2A 智能体',
-    kindOidc: 'OIDC 提供方',
-    kindObs: '可观测性导出器',
-    kindClaim: 'Claim 映射',
-    kindGuardrailAttach: '护栏附件',
-    kindPassthrough: '透传路由',
-    kindMcpAuth: 'MCP 认证设置',
-    kindTeams: '团队',
-    kindUsers: '成员',
-    kindPricing: '计费价目',
-    kindBudgets: '预算',
-    kindBudgetPolicy: '预算策略',
-    kindUsageAccounting: '用量记账',
-    kindMcpPolicies: 'MCP 访问策略',
     useRawYaml: '该资源类型结构较复杂，请用「原始 YAML」标签页编辑（它会原样往返该条目）。',
-    colPricingKey: '计费键',
-    colScope: '作用范围',
-    colScopeRef: '范围引用',
-    colPeriod: '周期',
-    colInputPer1k: '输入 /1K',
-    colOutputPer1k: '输出 /1K',
-    colFailMode: '失败模式',
-    colGraceSeconds: '宽限（秒）',
-    colExcludeEstimated: '排除估算用量',
   },
   playground: {
     title: '试玩 / 对话',
