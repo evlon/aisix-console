@@ -67,7 +67,9 @@ const emptyForm = () => ({
     max_fallbacks: '',
     retry_on_429: false,
     fallback_on_statuses: '',
-    when_all_unavailable: 'fail',
+    // Left to the gateway unless the user picks one: a create that writes a value
+    // nobody chose is the same defect as an inspection that does.
+    when_all_unavailable: '',
     sticky: false,
   },
   ensemble: {
@@ -142,21 +144,33 @@ const RECOMMENDED_TIMEOUTS = {
 };
 const recTimeouts = computed(() => RECOMMENDED_TIMEOUTS[form.value.shape] ?? RECOMMENDED_TIMEOUTS.direct);
 
+// Whether the user has touched the timeout fields in this form. The recommended
+// values have to be replaced when the shape changes — routing needs a SHORT
+// request timeout so a hung upstream falls back instead of blocking for minutes —
+// but a value the user typed must never be overwritten. "Is the field non-empty"
+// cannot tell those apart: openCreate fills it, so switching to routing right
+// after creating a model kept the direct-shape 120s timeout, which is exactly the
+// value the recommendation exists to avoid.
+const touchedTimeouts = ref(false);
+
 function fillRecommendedTimeouts() {
   form.value.common.timeout = recTimeouts.value.timeout;
   form.value.common.stream_timeout = recTimeouts.value.stream;
 }
 
-// Pre-fill recommended timeouts when the shape changes and the fields are
-// still empty (never clobber a value the user already typed).
-watch(
-  () => form.value.shape,
-  () => {
-    if (form.value.common.timeout === '' && form.value.common.stream_timeout === '') {
-      fillRecommendedTimeouts();
-    }
-  },
-);
+// Pre-fill the recommended timeouts only in response to the user CHOOSING a shape
+// or purpose — never because a form was opened.
+//
+// This was a watcher on form.shape, and openEdit assigns form.shape, so merely
+// opening a routing model for a look and pressing save wrote a 30s timeout and
+// (via when_all_unavailable below) `fail` into the file. Nobody chose those
+// values and nothing said they had been written: an inspection changed runtime
+// behaviour. The 「推荐值」 button next to the timeout row is the user-driven path
+// this was always meant to be.
+function chooseShape(next) {
+  form.value.shape = next;
+  if (!touchedTimeouts.value) fillRecommendedTimeouts();
+}
 
 // Fetch the selected provider's real upstream models (GET {api_base}/models)
 // so model_name can be picked from a list instead of typed. Falls back to
@@ -221,6 +235,7 @@ function detectShape(e) {
 
 function openCreate() {
   form.value = emptyForm();
+  touchedTimeouts.value = false;
   fillRecommendedTimeouts(); // pre-fill the direct-shape recommended values
   editing.value = {};
   lastResult.value = null;
@@ -229,6 +244,7 @@ function openCreate() {
 
 function openEdit(e) {
   const f = emptyForm();
+  touchedTimeouts.value = false;
   const shape = detectShape(e);
   f.display_name = e.display_name ?? '';
   f.shape = shape;
@@ -255,7 +271,7 @@ function openEdit(e) {
     max_fallbacks: r.max_fallbacks ?? '',
     retry_on_429: !!r.retry_on_429,
     fallback_on_statuses: (r.fallback_on_statuses ?? []).join(','),
-    when_all_unavailable: r.when_all_unavailable ?? 'fail',
+    when_all_unavailable: r.when_all_unavailable ?? '',
     sticky: !!r.sticky,
   };
   const en = e.ensemble || {};
@@ -406,7 +422,10 @@ function buildEntry() {
     if (r.retry_on_429) entry.routing.retry_on_429 = true;
     const fb = strArr(r.fallback_on_statuses);
     if (fb.length) entry.routing.fallback_on_statuses = fb;
-    entry.routing.when_all_unavailable = r.when_all_unavailable;
+    // Only when it is actually set. Omitting it keeps whatever the entry had
+    // (the server merges), so opening a routing model that never had this field
+    // and saving it leaves the file as it was.
+    if (r.when_all_unavailable) entry.routing.when_all_unavailable = r.when_all_unavailable;
   } else if (f.shape === 'ensemble') {
     const en = f.ensemble;
     const panel = en.panel
@@ -560,7 +579,7 @@ onMounted(load);
           <label>{{ t('models.purpose') }}</label>
           <select
             v-model="form.purpose"
-            @change="form.shape = (PURPOSES.find((p) => p.key === form.purpose) || {}).shape || 'direct'"
+            @change="chooseShape((PURPOSES.find((p) => p.key === form.purpose) || {}).shape || 'direct')"
           >
             <option v-for="p in PURPOSES" :key="p.key" :value="p.key">{{ t('models.' + purposeKeys[p.key]) }}</option>
           </select>
@@ -570,7 +589,7 @@ onMounted(load);
           <label>{{ t('models.shape') }}</label>
           <select
             v-model="form.shape"
-            @change="form.purpose = form.shape === 'direct' && (form.direct.embedding_text || '').trim() ? 'embedding' : form.shape"
+            @change="form.purpose = form.shape === 'direct' && (form.direct.embedding_text || '').trim() ? 'embedding' : form.shape; chooseShape(form.shape)"
           >
             <option v-for="(k, val) in shapeKeys" :key="val" :value="val">{{ t('models.' + k) }}</option>
           </select>
@@ -679,6 +698,7 @@ onMounted(load);
           <div class="form-row">
             <label>{{ t('models.whenAllUnavailable') }}</label>
             <select v-model="form.routing.when_all_unavailable">
+              <option value="">{{ t('models.gatewayDefault') }}</option>
               <option value="fail">{{ t('models.fail') }}</option>
               <option value="try_anyway">{{ t('models.tryAnyway') }}</option>
             </select>
@@ -765,6 +785,7 @@ onMounted(load);
               type="number"
               :placeholder="String(recTimeouts.timeout)"
               style="flex: 1"
+              @input="touchedTimeouts = true"
             />
             <button class="ghost" style="white-space: nowrap" @click="fillRecommendedTimeouts">
               {{ t('models.useRecommended') }}
@@ -773,7 +794,12 @@ onMounted(load);
         </div>
         <div class="form-row">
           <label>{{ t('models.streamTimeoutMs') }}</label>
-          <input v-model="form.common.stream_timeout" type="number" :placeholder="String(recTimeouts.stream)" />
+          <input
+            v-model="form.common.stream_timeout"
+            type="number"
+            :placeholder="String(recTimeouts.stream)"
+            @input="touchedTimeouts = true"
+          />
         </div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px">
           {{ t('models.timeoutHint', { rec: recTimeouts.timeout, stream: recTimeouts.stream }) }}

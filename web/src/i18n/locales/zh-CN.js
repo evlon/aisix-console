@@ -140,6 +140,7 @@ export default {
     deleteConfirm: '删除模型 "{name}"？',
     shape: '模型形态',
     purpose: '用途',
+    gatewayDefault: '（网关默认）',
     purposeHint:
       '上面选的是「你要它做什么」，下面是同一件事在配置里的名字。两者互相同步 —— 懂配置可以直接选形态，不确定就选用途。',
     purposeDirect: '接一个上游供应商，直接由它提供',

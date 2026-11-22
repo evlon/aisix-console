@@ -134,6 +134,7 @@ export default {
     deleteConfirm: 'Delete model "{name}"?',
     shape: 'Model shape',
     purpose: 'What it is for',
+    gatewayDefault: '(gateway default)',
     purposeHint:
       'The row above is what you want it to do; the one below is the same choice under the name the configuration uses. They stay in step — pick the shape directly if you know it, pick the purpose if you are not sure.',
     purposeDirect: 'One upstream provider serves it directly',
