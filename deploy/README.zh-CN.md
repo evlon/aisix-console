@@ -223,6 +223,43 @@ aisix ≥ 1.11 要求 `_format_version: "2"` 且**每行都带 UUID `id`**；见
    它写的就是这个文件。等价做法是把变量放进**控制台容器**的 `environment:` / `env_file:`，
    子进程会继承它；但那等于把网关的密钥再抄一份到控制台容器，不如用 `secretsFile`。
 
+   **这四项也都能用环境变量覆盖（`CONSOLE_*`，见 `server/src/config.js`），而环境变量优先于配置文件**
+   （加载顺序是 默认值 → 配置文件 → 环境变量）。所以重建容器时**照抄旧容器的全部 `CONSOLE_*`**：
+   漏抄一个不会报错，而是**静默改回配置文件里的值**。典型后果是漏了 `CONSOLE_METRICS_DB`，
+   用量库落到另一个路径，**历史指标被割裂**（旧库里可能已经有几百 MB）。照抄的办法：
+
+   ```sh
+   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' <旧容器名>
+   ```
+
+## 控制台自带的 HTTP 接口（给脚本用）
+
+上一节说了 `resources.yaml` 应当只有一个写入者。脚本要么**接管整个文件**，要么**走控制台**。
+给后者的接口约定：
+
+| 请求 | 作用 |
+|---|---|
+| `GET /api/resources/<集合>` | 列出。集合名就是文件里的顶层键（`models`、`api_keys`…） |
+| `GET /api/resources/<集合>/<identity>` | 读单条 |
+| `PUT /api/resources/<集合>/<identity>` | 改单条，**默认部分更新** |
+| `PUT` 且 body 带 `{"mode":"replace"}` | 整条覆盖（控制台的「原始 YAML」页走这条） |
+| `POST /api/resources/<集合>` | 新增 |
+| `DELETE /api/resources/<集合>/<identity>` | 删除 |
+
+**`<identity>` 是「标识字段的值」，不是 `id`**，按集合而异：
+
+- `provider_keys`、`models`、`api_keys` → `display_name`
+- `mcp_servers`、`a2a_agents`、`teams`、`users` 等 → `name`；`pricing` → `key`
+- 少数是复合值：`guardrail_attachments` 是 `护栏id/作用类型/对象`、`budgets` 是 `范围:对象`；
+  单例集合（`mcp_auth_settings`、`budget_policy`、`usage_accounting`）用集合名本身
+
+**用 `id` 打过去会得到 404**（看起来像「条目不存在」，其实是标识用错了）。而且**改名之后 identity 也跟着变**，
+所以脚本在改名后要先重新 `GET` 一次拿当前的名字。
+
+保存响应里有三个字段是给人看的：`preserved`（本次未提交、已按原值保留的字段**路径** —— 只有路径、没有值，
+因为 `provider_keys[].api_key` 与 `mcp_servers.secret` 在文件里是明文）、`renamed`（改名时联动更新的引用），
+以及合成好的一句话 `notice`。
+
 ## 保存会重写整个文件：注释会丢，且同一份文件只应有一个写入者
 
 控制台保存时把整份文档重新序列化（`server/src/resources.js` 的 `serialize()`），因此：

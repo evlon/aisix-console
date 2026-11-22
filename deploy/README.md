@@ -254,6 +254,50 @@ for a process named `aisix`. Two consequences when the gateway runs elsewhere
    `environment:` / `env_file:`, which the child inherits; but that copies the
    gateway's secrets into the console container, so `secretsFile` is better.
 
+   **All four can also be overridden by environment variables (`CONSOLE_*`, see
+   `server/src/config.js`), and the environment wins over the file** (defaults →
+   file → environment). So when you recreate the container, **copy every
+   `CONSOLE_*` from the old one**: a missed variable does not error, it silently
+   falls back to the value in the file. The usual consequence is a missing
+   `CONSOLE_METRICS_DB`, which moves the usage database elsewhere and **splits
+   your metrics history** (the old one may hold hundreds of MB). To copy them:
+
+   ```sh
+   docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' <old container>
+   ```
+
+## The console's own HTTP API, for scripts
+
+The previous section says `resources.yaml` should have one writer. A script either
+**takes over the whole file** or **goes through the console**. For the latter:
+
+| Request | Effect |
+|---|---|
+| `GET /api/resources/<collection>` | list. The collection name is the top-level key in the file (`models`, `api_keys`, …) |
+| `GET /api/resources/<collection>/<identity>` | read one |
+| `PUT /api/resources/<collection>/<identity>` | update one, **a partial update by default** |
+| `PUT` with `{"mode":"replace"}` in the body | replace the whole entry (what the "Raw YAML" tab does) |
+| `POST /api/resources/<collection>` | create |
+| `DELETE /api/resources/<collection>/<identity>` | delete |
+
+**`<identity>` is the value of the identity field, not the `id`**, and which field
+that is depends on the collection:
+
+- `provider_keys`, `models`, `api_keys` → `display_name`
+- `mcp_servers`, `a2a_agents`, `teams`, `users`, … → `name`; `pricing` → `key`
+- a few are composite: `guardrail_attachments` is `guardrail-id/scope-type/scope`,
+  `budgets` is `scope:target`; the singletons (`mcp_auth_settings`,
+  `budget_policy`, `usage_accounting`) use the collection name itself
+
+**Passing the `id` answers 404** — which reads like "no such entry" but is a wrong
+identifier. And a rename changes the identity, so a script must re-`GET` after a
+rename to learn the current name.
+
+A save response carries three fields written for a human: `preserved` (the **paths**
+of fields this submission did not mention and that were kept — paths only, never
+values, because `provider_keys[].api_key` and `mcp_servers.secret` are plaintext in
+this file), `renamed` (references updated by a rename), and a composed `notice`.
+
 ## Saving rewrites the whole file: comments are lost, and one writer only
 
 A console save re-serialises the entire document (`serialize()` in
