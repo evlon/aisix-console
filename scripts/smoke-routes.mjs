@@ -40,14 +40,32 @@ const session = flag('--session', process.env.SMOKE_SESSION ?? 'smoke');
 const settle = Number(flag('--settle', '4000'));
 
 // The route list comes from the router itself, so a page added tomorrow cannot be
-// forgotten here — the same reason the copy guards read the catalogue.
-const routes = [
-  ...readFileSync(path.join(ROOT, 'web/src/router.js'), 'utf8').matchAll(/\bpath:\s*'([^']+)'/g),
-].map((m) => m[1]);
-if (!routes.length) {
-  console.error('No routes found in web/src/router.js — refusing to report a vacuous pass.');
+// forgotten here — the same reason the copy guards read the catalogue. Overridable
+// because resolving it relative to this script breaks when the script is copied
+// somewhere else (a colleague had to build a two-file tree to run it).
+function findRouter() {
+  const explicit = flag('--router', process.env.SMOKE_ROUTER);
+  const candidates = [
+    explicit,
+    path.join(ROOT, 'web/src/router.js'),
+    path.join(process.cwd(), 'web/src/router.js'),
+  ].filter(Boolean);
+  for (const c of candidates) if (existsSync(c)) return c;
+  console.error(`No router found. Tried: ${candidates.join(', ')}. Pass --router <path>.`);
   process.exit(2);
 }
+
+const routes = [...readFileSync(findRouter(), 'utf8').matchAll(/\bpath:\s*'([^']+)'/g)].map((m) => m[1]);
+if (!routes.length) {
+  console.error('No routes found — refusing to report a vacuous pass.');
+  process.exit(2);
+}
+
+// The catalogue's detail pages are not routes: they are reached by clicking a card
+// on /resources. These four are the ones the brace defect originally hit — their
+// bands silently disappeared — so they need their own judgement rather than being
+// covered by "the /resources route rendered".
+const DETAIL_KINDS = ['mcp_servers', 'teams', 'cache_policies', 'rate_limit_policies'];
 
 // What "rendered" means, stated as the failure signature rather than a length
 // threshold: a healthy view has text beyond its own heading. A blank view keeps
@@ -127,6 +145,37 @@ async function opencli(args) {
 const failures = [];
 console.log(`render smoke: ${routes.length} routes against ${base} (session "${session}")`);
 
+// One band judgement, used by routes and detail pages alike. The hole this closes:
+// a band showing a single row with NO toggle is indistinguishable from a collapsed
+// band by row count alone, and an earlier version of this check passed it silently
+// — which is the very "collapsed or missing?" confusion the check exists to end.
+async function judgeBand(result) {
+  if (!result.ok) return '';
+  if (result.bandRows === 1 && result.hasToggle) {
+    await opencli(['browser', 'eval', EXPAND, '--session', session]);
+    await new Promise((r) => setTimeout(r, 400));
+    const rows = Number(await opencli(['browser', 'eval', BAND_ROWS, '--session', session]));
+    // Reset before the next page: the state is per-origin, and leaving it expanded
+    // makes the following page skip its own collapse->expand check.
+    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
+    if (rows <= 1) {
+      result.ok = false;
+      result.why = `the expand toggle did not reveal the rest: band stayed at ${rows} row(s) after clicking it`;
+    }
+    return ` band 1->${rows}`;
+  }
+  if (result.bandRows === 1 && !result.hasToggle) {
+    result.ok = false;
+    result.why = 'band shows one row and has no expand control — the other answers are missing, not collapsed';
+    return ' band 1 (no toggle)';
+  }
+  if (result.bandRows > 1) {
+    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
+    return ` band ${result.bandRows} (left over expanded, reset)`;
+  }
+  return '';
+}
+
 for (const route of routes) {
   await opencli(['browser', 'open', `${base}${route}`, '--session', session]);
   await new Promise((r) => setTimeout(r, settle));
@@ -134,29 +183,9 @@ for (const route of routes) {
   const result = JSON.parse(raw);
 
   // The explanation band is collapsed by default (that is what won the space
-  // back). "Collapsed" must therefore be verified as collapsed-then-expandable,
-  // not mistaken for missing: a colleague asked for exactly this and could only
-  // report "six questions found: 0, expansion not verified".
-  let bandNote = '';
-  if (result.ok && result.bandRows === 1 && result.hasToggle) {
-    await opencli(['browser', 'eval', EXPAND, '--session', session]);
-    await new Promise((r) => setTimeout(r, 400));
-    const rows = Number(await opencli(['browser', 'eval', BAND_ROWS, '--session', session]));
-    bandNote = ` band 1->${rows}`;
-    // Put it back before the next route: the expanded state is remembered per
-    // origin, so leaving it set makes the following page start expanded and skip
-    // its own collapse->expand check.
-    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
-    if (rows <= 1) {
-      result.ok = false;
-      result.why = `the expand toggle did not reveal the rest: band stayed at ${rows} row(s) after clicking it`;
-    }
-  } else if (result.bandRows > 1) {
-    // Remembered as expanded from an earlier run — reset so the default state is
-    // what the next run sees.
-    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
-    bandNote = ` band ${result.bandRows} (left over expanded, reset)`;
-  }
+  // back), so "collapsed" has to be verified as collapsed-then-expandable rather
+  // than mistaken for missing.
+  const bandNote = await judgeBand(result);
 
   const verdict = result.ok ? 'ok  ' : 'FAIL';
   console.log(`  ${verdict} ${route.padEnd(16)} h1="${result.h1}" text=${result.len} views=${result.views}${bandNote}`);
@@ -164,7 +193,52 @@ for (const route of routes) {
 }
 
 if (failures.length) {
-  console.error(`\n${failures.length} route(s) rendered nothing:`);
+  // Failures are printed once, after the detail pages have also run — exiting here
+  // would report the routes and skip the catalogue checks that matter most.
+  console.error(`\n${failures.length} page(s) already failed among the routes; continuing to the detail pages.`);
+}
+
+console.log('\nevery route rendered content');
+
+// ---- catalogue detail pages ------------------------------------------------
+// Reached by clicking a card, not by URL. The check is the same one the routes get
+// (something beyond the heading) plus the band: collapsed to 1 row, expanding to 7.
+console.log(`\ndetail pages: ${DETAIL_KINDS.length} kinds via /resources`);
+
+for (const kind of DETAIL_KINDS) {
+  // The query string is not decoration: entering a detail page does not change the
+  // URL, so opening the same /resources again is a no-op and the page stays in the
+  // detail view where no card exists. A distinct URL forces the reload.
+  await opencli(['browser', 'open', `${base}/resources?detail=${kind}`, '--session', session]);
+  await new Promise((r) => setTimeout(r, settle));
+  const click = JSON.parse(
+    await opencli([
+      'browser', 'eval',
+      `(() => { const c = document.querySelector('main .rcard[data-kind="${kind}"]'); if (!c) return JSON.stringify({ ok: false }); c.click(); return JSON.stringify({ ok: true }); })()`,
+      '--session', session,
+    ]),
+  );
+  if (!click.ok) {
+    console.log(`  FAIL ${kind.padEnd(22)} no card with data-kind="${kind}" on /resources`);
+    failures.push({ route: `/resources -> ${kind}`, h1: '', len: 0, why: 'card not found' });
+    continue;
+  }
+  await new Promise((r) => setTimeout(r, settle));
+  const result = JSON.parse(await opencli(['browser', 'eval', `(0,eval)(atob('${b64}'))`, '--session', session]));
+
+  const bandNote = await judgeBand(result);
+  if (result.ok && result.bandRows < 1) {
+    result.ok = false;
+    result.why = 'no explanation band on this detail page';
+  }
+
+  const verdict = result.ok ? 'ok  ' : 'FAIL';
+  console.log(`  ${verdict} ${kind.padEnd(22)} h1="${result.h1}" text=${result.len}${bandNote}`);
+  if (!result.ok) failures.push({ route: `/resources -> ${kind}`, ...result });
+}
+
+if (failures.length) {
+  console.error(`\n${failures.length} page(s) failed:`);
   for (const f of failures) {
     console.error(`\n  ${f.route}  h1="${f.h1}" text=${f.len}`);
     console.error(`    ${f.why ?? 'only the heading is present — the view rendered as a comment node'}`);
@@ -176,4 +250,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('\nevery route rendered content');
+console.log('\nevery route and detail page rendered content');

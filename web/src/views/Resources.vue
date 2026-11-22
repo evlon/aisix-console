@@ -867,6 +867,7 @@ onMounted(() => {
             v-for="k in g.kinds"
             :key="k.key"
             :kind="k.key"
+            :data-kind="k.key"
             :count="counts[k.key] || 0"
             :own-page="k.ownPage"
             :own-page-name="ownPageName(k)"
