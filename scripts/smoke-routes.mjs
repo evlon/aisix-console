@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// Render smoke check: every route must render CONTENT, not just its title.
+//
+// Why this is a separate script and not a unit test. Four defects in this project
+// were invisible to the build, to `node --test`, and to the console:
+//
+//   * an i18n message with a bare brace  -> the component renders as a comment
+//   * a template calling FL() that the <script setup> never defined -> same
+//   * a `const` helper used above its own declaration (a TDZ)       -> same
+//   * a kind with no form branch, so the modal rendered empty
+//
+// In every case the page loads, Vue throws at RENDER time, and the view becomes a
+// comment node: the shell (sidebar, h1) looks fine and the body is empty. Only a
+// real browser sees it, which is why this exists.
+//
+//   node scripts/smoke-routes.mjs
+//   node scripts/smoke-routes.mjs --base http://127.0.0.1:8799 --session smoke2
+//
+// Needs a running console and `opencli` on PATH. It is deliberately not wired
+// into `npm test`: a browser dependency has no place in the unit suite, and a
+// check that silently skips itself when no browser is present is worse than no
+// check at all. Run it before a release.
+
+import { execFile } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+const argv = process.argv.slice(2);
+const flag = (name, fallback) => {
+  const i = argv.indexOf(name);
+  return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
+};
+const base = flag('--base', process.env.SMOKE_BASE ?? 'http://127.0.0.1:8788');
+const session = flag('--session', process.env.SMOKE_SESSION ?? 'smoke');
+const settle = Number(flag('--settle', '4000'));
+
+// The route list comes from the router itself, so a page added tomorrow cannot be
+// forgotten here — the same reason the copy guards read the catalogue.
+const routes = [
+  ...readFileSync(path.join(ROOT, 'web/src/router.js'), 'utf8').matchAll(/\bpath:\s*'([^']+)'/g),
+].map((m) => m[1]);
+if (!routes.length) {
+  console.error('No routes found in web/src/router.js — refusing to report a vacuous pass.');
+  process.exit(2);
+}
+
+// What "rendered" means, stated as the failure signature rather than a length
+// threshold: a healthy view has text beyond its own heading. A blank view keeps
+// exactly the h1 and nothing else.
+const PROBE = `(() => {
+  const main = document.querySelector('main');
+  if (!main) return JSON.stringify({ ok: false, why: 'no <main> element' });
+  const h1 = (main.querySelector('h1')?.textContent ?? '').trim();
+  const text = (main.textContent ?? '').replace(/\\s+/g, ' ').trim();
+  const views = main.querySelectorAll('.card, .rcard, table').length;
+  return JSON.stringify({
+    ok: text.length > h1.length + 10,
+    h1,
+    len: text.length,
+    views,
+    head: main.innerHTML.replace(/data-v-[a-z0-9]+=""/g, '').replace(/\\s+/g, ' ').slice(0, 160),
+  });
+})()`;
+
+// The probe travels base64-encoded: on Windows `opencli` is a .cmd, so Node runs
+// it through a shell that joins arguments without quoting, and raw JS full of
+// spaces and quotes does not survive that.
+const b64 = Buffer.from(PROBE, 'utf8').toString('base64');
+
+// On Windows `opencli` is a .cmd, and Node refuses to spawn one without a shell —
+// which both warns (DEP0190) and concatenates arguments unescaped. The shim is a
+// thin wrapper around a JS entry, so find and call that directly instead; fall
+// back to the command itself if the layout ever changes.
+function findCliEntry() {
+  const explicit = flag('--opencli', process.env.OPENCLI_ENTRY);
+  if (explicit) return explicit;
+  const rel = path.join('node_modules', '@jackwener', 'opencli', 'dist', 'src', 'main.js');
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, rel);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+const cliEntry = findCliEntry();
+
+async function opencli(args) {
+  const command = cliEntry ? process.execPath : 'opencli';
+  const prefix = cliEntry ? [cliEntry] : [];
+  const { stdout } = await execFileAsync(command, [...prefix, ...args], {
+    shell: !cliEntry,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  const envelope = JSON.parse(stdout.trim());
+  if (envelope.ok === false) throw new Error(envelope.error?.message ?? 'opencli call failed');
+  return envelope.data;
+}
+
+const failures = [];
+console.log(`render smoke: ${routes.length} routes against ${base} (session "${session}")`);
+
+for (const route of routes) {
+  await opencli(['browser', 'open', `${base}${route}`, '--session', session]);
+  await new Promise((r) => setTimeout(r, settle));
+  const raw = await opencli(['browser', 'eval', `(0,eval)(atob('${b64}'))`, '--session', session]);
+  const result = JSON.parse(raw);
+  const verdict = result.ok ? 'ok  ' : 'FAIL';
+  console.log(`  ${verdict} ${route.padEnd(16)} h1="${result.h1}" text=${result.len} views=${result.views}`);
+  if (!result.ok) failures.push({ route, ...result });
+}
+
+if (failures.length) {
+  console.error(`\n${failures.length} route(s) rendered nothing:`);
+  for (const f of failures) {
+    console.error(`\n  ${f.route}  h1="${f.h1}" text=${f.len}`);
+    console.error(`    ${f.why ?? 'only the heading is present — the view rendered as a comment node'}`);
+    console.error(`    main starts: ${f.head}`);
+  }
+  console.error('\nA render-time throw leaves no trace in the DOM. Open the route and read the');
+  console.error('browser console — note that wrap console.error from inside the page if the');
+  console.error('error happened during load, because it fires before any DevTools opens.');
+  process.exit(1);
+}
+
+console.log('\nevery route rendered content');

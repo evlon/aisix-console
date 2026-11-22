@@ -9,7 +9,8 @@
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev -w server\" \"npm:dev -w web\"",
     "build": "npm run build -w web",
     "start": "npm run start -w server",
-    "test": "npm test -w server && npm test -w web"
+    "test": "npm test -w server && npm test -w web",
+    "smoke": "node scripts/smoke-routes.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
