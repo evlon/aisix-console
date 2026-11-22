@@ -25,7 +25,11 @@ import {
   RELATIONS,
   MIS_MODES,
   OWN_PAGE_NAV,
+  FORM_FIELDS,
 } from '../src/lib/resourceCatalog.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 // Cross-package on purpose: the effect self-check is server-side and its codes
 // are what the UI has to translate, so the two halves must be asserted
 // together or a new check ships with no copy.
@@ -215,8 +219,7 @@ test('every effect check has copy, and no copy is orphaned', () => {
   }
 });
 
-test('the placeholders in each check translation match the params the server sends', () => {
-  // The copy is interpolated on the client, so a translation using {count} where
+test('the placeholders in each check translation match the params the server sends', () => {  // The copy is interpolated on the client, so a translation using {count} where
   // the server sends {n} shows the user a literal "{count}".
   const problems = [];
   for (const code of CHECK_CODES) {
@@ -231,4 +234,78 @@ test('the placeholders in each check translation match the params the server sen
     }
   }
   assert.deepEqual(problems, [], problems.join('\n'));
+});
+
+test('no field copy key contains a dot', () => {
+  // i18n paths use dots as the nesting separator, so a field key like
+  // `anonymous.enabled` is looked up as field -> anonymous -> enabled and never
+  // resolves. Nested form fields are camelCased instead.
+  const bad = [];
+  for (const [kind, fields] of Object.entries(FORM_FIELDS)) {
+    for (const field of fields) if (field.includes('.')) bad.push(`${kind}.${field}`);
+  }
+  assert.deepEqual(bad, [], `field keys must not contain a dot: ${bad.join(', ')}`);
+});
+
+test('every field an inline form renders has a label in both locales', () => {
+  // Label resolution is a fallback chain: the per-kind override, then the shared
+  // field.*, then the table-column label col.*. A gap anywhere in the chain is
+  // what used to put `auth_type` and `bound_claims (JSON)` in front of a user.
+  const missing = [];
+  for (const [kind, fields] of Object.entries(FORM_FIELDS)) {
+    assert.ok(KINDS.some((k) => k.key === kind), `FORM_FIELDS names unknown kind ${kind}`);
+    for (const field of fields) {
+      const candidates = [
+        `resourceCatalog.kind.${kind}.field.${field}`,
+        `resourceCatalog.field.${field}`,
+        `resourceCatalog.col.${field}`,
+      ];
+      for (const [name, loc] of Object.entries(locales)) {
+        if (!candidates.some((key) => filled(resolve(loc, key)))) {
+          missing.push(`${name}: ${kind}.${field} (tried ${candidates.join(' / ')})`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `fields with no label:\n${missing.join('\n')}`);
+});
+
+test('the form template and FORM_FIELDS describe the same fields', () => {
+  // The mirror check. The test above proves the structure has copy; this one
+  // proves the page actually asks for that copy — a label the template renders
+  // but the structure omits is never checked for translation, and one the
+  // structure lists but the template dropped is dead weight.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(path.join(here, '../src/views/Resources.vue'), 'utf8');
+  const inTemplate = new Map();
+  // Kind keys contain digits (`a2a_agents`), hence [a-z0-9_].
+  for (const m of src.matchAll(/FL\(\s*'([a-z][a-z0-9_]*)'\s*,\s*'([^']+)'\s*\)/g)) {
+    const [, kind, field] = m;
+    if (!inTemplate.has(kind)) inTemplate.set(kind, new Set());
+    inTemplate.get(kind).add(field);
+  }
+  assert.ok(inTemplate.size > 0, 'no FL() calls found — did the labels get reverted to raw keys?');
+
+  const problems = [];
+  for (const [kind, fields] of Object.entries(FORM_FIELDS)) {
+    const seen = inTemplate.get(kind) ?? new Set();
+    for (const field of fields) {
+      if (!seen.has(field)) problems.push(`FORM_FIELDS lists ${kind}.${field} but the template does not render it`);
+    }
+    for (const field of seen) {
+      if (!fields.includes(field)) problems.push(`the template renders ${kind}.${field} but FORM_FIELDS omits it`);
+    }
+  }
+  for (const kind of inTemplate.keys()) {
+    if (!FORM_FIELDS[kind]) problems.push(`the template renders fields for unknown kind ${kind}`);
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
+test('no raw configuration key is left as a form label', () => {
+  // The regression guard for this whole change: `<label>auth_type</label>`.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(path.join(here, '../src/views/Resources.vue'), 'utf8');
+  const raw = [...src.matchAll(/<label>\s*([a-z][a-z0-9_]*(?:\.[a-z_]+)*)\s*\*?\s*<\/label>/g)].map((m) => m[1]);
+  assert.deepEqual(raw, [], `labels still showing the configuration key: ${raw.join(', ')}`);
 });

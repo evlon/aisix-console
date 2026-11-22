@@ -198,6 +198,58 @@ export const MIS_MODES = {
   observability_exporters: ['row', 'silent', 'silent', 'silent'],
 };
 
+// A field's copy key must NOT contain a dot: i18n paths use dots as the nesting
+// separator, so `anonymous.enabled` would be looked up as `field` → `anonymous`
+// → `enabled` and never resolve. Nested form fields are therefore camelCased
+// (`anonymousEnabled`). web/test/resourceCatalog.test.js asserts this.
+//
+// The fields each inline form renders, by copy key.
+//
+// WHY: the forms used to label their inputs with the raw configuration keys —
+// `auth_type`, `forward_client_headers`, `bound_claims (JSON)` — forty-five of
+// them across this page. A user reading a form whose labels are the file format
+// concludes the page is for engineers, and the six-question band above it reads
+// as documentation for somebody else. The keys here are what
+// web/test/resourceCatalog.test.js asserts have copy in both locales, so a field
+// added to a form cannot ship with no label.
+//
+// Copy resolves per kind first, then the shared `resourceCatalog.field.<key>`,
+// then the table-column label `resourceCatalog.col.<key>` — that last fallback is
+// why `name`, `url`, `priority` and friends are written once instead of fifteen
+// times. It is still structure-only here: no strings in this file.
+export const FORM_FIELDS = {
+  mcp_servers: [
+    'name', 'type', 'url', 'transport', 'auth_type', 'secret', 'client_id', 'token_url',
+    'scopes', 'spec', 'api_key_header', 'timeout_ms', 'forward_client_headers', 'enabled',
+  ],
+  a2a_agents: [
+    'name', 'url', 'protocol_version', 'auth_type', 'secret', 'timeout_ms',
+    'forward_client_headers', 'enabled',
+  ],
+  oidc_providers: [
+    'name', 'issuer', 'audiences', 'jwks_uri', 'hmac_secret', 'identity_claim',
+    'required_scopes', 'bound_claims', 'leeway_secs', 'enabled',
+  ],
+  guardrail_attachments: ['guardrail_id', 'scope_type', 'scope_id', 'priority', 'enabled'],
+  passthrough_routes: [
+    'name', 'path_prefix', 'hosts', 'target_url', 'preserve_host', 'auth_mode',
+    'auth_header_name', 'anonymous_key', 'source_cidrs', 'credential_mode', 'provider_key',
+    'identity_header', 'forward_client_headers', 'timeout_ms', 'enabled',
+  ],
+  mcp_auth_settings: [
+    'resource_url', 'anonymousEnabled', 'anonymousApiKeyId', 'anonymousSourceCidrs',
+    'anonymousServers', 'anonymousAggregateEntry',
+  ],
+  claim_mappings: ['name', 'jwt_provider', 'priority', 'match', 'resolveApiKey', 'enabled'],
+};
+
+// The label text as it appears in the template, for the keys that would make a
+// poor copy key. The transform strips a trailing " (JSON)" and nothing else.
+export const FORM_FIELD_ALIASES = {
+  'spec (JSON)': 'spec',
+  'bound_claims (JSON)': 'bound_claims',
+};
+
 // The `applies_to` values the gateway accepts, and what any other value means.
 // The gateway parses this field as a free string and treats anything it does
 // not recognise — including the empty string — as `all`, so a typo silently

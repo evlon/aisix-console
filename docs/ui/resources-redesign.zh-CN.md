@@ -415,7 +415,8 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 | 组件 | 新增 `ResourceCard.vue`、`ResourceFacts.vue`、`GatewayFeedback.vue` |
 | 视图 | `Resources.vue` 改为「目录 → 详情」两级；旧的 15 个按钮行、`resources.hint`、`colLabel` 的英文字段名兜底全部删除 |
 | 反馈条 | 目录页与详情页都接入；被拒行的「资源类型」列显示翻译后的资源名 |
-| 生效自检 | 新增 `server/src/effectChecks.js`（14 条）+ `GET /api/resources/effect-checks`；每次保存后自动刷新 |
+| 生效自检 | 新增 `server/src/effectChecks.js`（15 条）+ `GET /api/resources/effect-checks`；每次保存后自动刷新 |
+| **编辑层表单** | `Resources.vue` 表单的 **64 个字段标签全部改为中文**（原为 `auth_type`、`forward_client_headers` 这类配置键名，共 68 处）。三层解析：每资源覆盖 → 共享 `field.*` → 表格列标签 `col.*` → 原键名兜底 |
 | 修掉的真缺陷 | `Dashboard.vue` 里「被拒绝的资源」表头写成「上游密钥」——抽取共用组件后由构造消除 |
 | 测试 | 新增 `server/test/effectChecks.test.js`(23) 与 `web/test/resourceCatalog.test.js`(12)；**server 83 项、web 34 项全通过** |
 | 构建 | `npx vite build` 通过 |
@@ -433,7 +434,9 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 1. 目录页多了一个标题 —— `App.vue` 已按路由渲染页面标题，我又写了一个 `h1`，重复；已去掉自己的标题，详情页的资源名降为二级标题。
 2. **网关不可达时反馈条仍宣称「本次加载全部通过」** —— 判断条件写成了 `!config`，而状态接口在网关掉线时返回的是 `{reachable:false}` 对象、不是 null。这正是本设计要消灭的「假安心」，已改为按「有没有 state 字段」判断，并在无裁决时显示「网关不可达，无法确认配置是否被加载」。
 
-**P3（表单补齐、策略页复用）尚未开始**，按 §8 的计划推进。
+**P3 进行中**：编辑层的**字段标签**已完成（64 个字段、中英各 31 个新增共享键 + 复用 29 个列标签）；
+**字段说明文字（每个字段一行「填什么、为什么、填错的后果」）** 与 **「策略」页复用** 尚未开始，按 §8 推进。
+`form` 侧的说明文字已预留 `FH(kind, field)` 解析与折叠规则，补齐时只需加文案，不动模板。
 
 ---
 

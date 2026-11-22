@@ -147,6 +147,46 @@ export default {
         '"{name}" allows a model called "{model}", but no model has that name: calls with it answer 403 while the key\'s model list comes back empty — usually a model was renamed and the reference was not updated.',
     },
 
+    // ── form field labels ── see the note in zh-CN.js
+    field: {
+      // Overrides for labels the table headers already define but with different
+      // wording: a column header says Status, a checkbox label says Enabled.
+      enabled: 'Enabled',
+      identity_claim: 'Identity claim',
+      jwt_provider: 'OIDC provider',
+      transport: 'Transport',
+      secret: 'Secret',
+      client_id: 'Client ID',
+      token_url: 'Token URL',
+      scopes: 'Scopes',
+      spec: 'OpenAPI document (JSON)',
+      api_key_header: 'Header carrying the key',
+      timeout_ms: 'Timeout (ms)',
+      forward_client_headers: 'Client headers to forward',
+      audiences: 'Audiences',
+      jwks_uri: 'JWKS URI',
+      hmac_secret: 'Shared secret',
+      required_scopes: 'Required scopes',
+      bound_claims: 'Bound claims (JSON)',
+      leeway_secs: 'Clock leeway (s)',
+      hosts: 'Hosts to match',
+      preserve_host: 'Preserve the original Host',
+      auth_mode: 'How callers authenticate',
+      auth_header_name: 'Auth header name',
+      anonymous_key: 'API key for the anonymous subject',
+      source_cidrs: 'Allowed source CIDRs',
+      credential_mode: 'Where the upstream credential comes from',
+      provider_key: 'Provider key to use',
+      identity_header: 'Identity header',
+      anonymousEnabled: 'Allow anonymous access',
+      anonymousApiKeyId: 'API key for the anonymous subject',
+      anonymousSourceCidrs: 'Allowed source CIDRs',
+      anonymousServers: 'MCP servers to expose',
+      anonymousAggregateEntry: 'Allow anonymous on the aggregate entry',
+      match: 'Match conditions',
+      resolveApiKey: 'API key to map onto',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {

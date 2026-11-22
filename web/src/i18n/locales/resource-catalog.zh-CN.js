@@ -142,6 +142,49 @@ export default {
         '「{name}」允许使用的模型里有「{model}」，但没有同名模型：这把密钥调用它会得到 403，而它的可用模型列表会是空的 —— 通常意味着模型改过名而没有同步。',
     },
 
+    // ── form field labels ──
+    // Shared across kinds; `col.*` (the table headers) covers name/url/priority
+    // and friends, and a per-kind override in `kind.<k>.field.<key>` wins over
+    // both. Written once here because `name` and `url` appear in five forms.
+    field: {
+      // Overrides for labels the table headers already define but with different
+      // wording: a column header says 状态, a checkbox label says 启用.
+      enabled: '启用',
+      identity_claim: '身份取自哪个声明',
+      jwt_provider: 'OIDC 提供方',
+      transport: '传输方式',
+      secret: '密钥',
+      client_id: '客户端 ID',
+      token_url: '取 token 的地址',
+      scopes: '授权范围（scopes）',
+      spec: 'OpenAPI 文档（JSON）',
+      api_key_header: '密钥放在哪个头',
+      timeout_ms: '超时（毫秒）',
+      forward_client_headers: '透传哪些请求头',
+      audiences: '受众',
+      jwks_uri: '公钥地址（JWKS）',
+      hmac_secret: '共享密钥',
+      required_scopes: '必需的 scope',
+      bound_claims: '必须匹配的声明（JSON）',
+      leeway_secs: '时钟容差（秒）',
+      hosts: '匹配域名',
+      preserve_host: '保留原 Host',
+      auth_mode: '调用方如何鉴权',
+      auth_header_name: '鉴权头名字',
+      anonymous_key: '匿名主体用哪把密钥',
+      source_cidrs: '允许的来源网段',
+      credential_mode: '上游凭证怎么来',
+      provider_key: '使用哪个上游密钥',
+      identity_header: '身份头',
+      anonymousEnabled: '启用匿名访问',
+      anonymousApiKeyId: '匿名主体用哪把密钥',
+      anonymousSourceCidrs: '允许的来源网段',
+      anonymousServers: '开放哪些 MCP 服务器',
+      anonymousAggregateEntry: '聚合入口也允许匿名',
+      match: '匹配条件',
+      resolveApiKey: '映射到哪把密钥',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {
