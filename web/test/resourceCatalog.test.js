@@ -369,6 +369,30 @@ test('normalise a real view file so the check above is not vacuous', () => {
   assert.ok(src.includes('FL(') && /const FL =/.test(src), 'Resources.vue should both use and define FL');
 });
 
+test('every kind either has a form or is declared raw-YAML only', () => {
+  // The invariant that a kind can silently fall through. With no form branch and
+  // no rawOnly flag, the modal renders an empty form and buildEntry runs off the
+  // end into the tail written for claim_mappings — so creating the resource is
+  // blocked by a "required" error that explains nothing, and editing it is blocked
+  // by a missing jwt_provider. teams and users were in exactly that state, listed
+  // in the catalogue as maintainable here, from P0 until this test existed.
+  const problems = [];
+  for (const kind of KINDS) {
+    // Either maintained on its own page (this page only links out), or raw-YAML
+    // only, or its form is a separate component, or it needs a field list here.
+    if (kind.ownPage || kind.rawOnly || kind.formElsewhere) continue;
+    if (!FORM_FIELDS[kind.key]) {
+      problems.push(`${kind.key} has no form and is not rawOnly — it would render an empty modal`);
+    }
+  }
+  for (const key of Object.keys(FORM_FIELDS)) {
+    const rec = KINDS.find((k) => k.key === key);
+    if (!rec) problems.push(`FORM_FIELDS names unknown kind ${key}`);
+    else if (rec.rawOnly) problems.push(`${key} is declared rawOnly but also declares form fields`);
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
 test('the form template and FORM_FIELDS describe the same fields', () => {
   // The mirror check. The test above proves the structure has copy; this one
   // proves the page actually asks for that copy — a label the template renders

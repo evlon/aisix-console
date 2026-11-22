@@ -53,9 +53,10 @@ const MODE_CLS = { file: 'err', row: 'warn', silent: 'plain' };
 // Starting point for a new entry, so the raw tab is not an empty box. Only the
 // fields upstream requires are pre-filled; the rest is left to the operator.
 const RAW_SKELETONS = {
-  teams: { name: '' },
-  users: { name: '' },
-  budgets: { scope: 'api_key', scope_ref: '', period: 'day' },
+  // Empty on purpose: every collection that used to need it now has a form. The
+  // mechanism stays because rawOnly is still a legitimate state — the guard in
+  // web/test/resourceCatalog.test.js allows a kind to be listed with no form as
+  // long as it says so.
 };
 
 const IDENTITY = {
@@ -178,6 +179,8 @@ function emptyEntry() {
       anonymous_source_cidrs: '', anonymous_servers: '', anonymous_aggregate_entry: false,
     };
   }
+  if (k === 'teams' || k === 'users') return { name: '', tags_text: '' };
+  if (k === 'budgets') return { scope: 'api_key', scope_ref: '', tag_text: '', period: 'day' };
   if (k === 'pricing') return { key: '', input_per_1k: '', output_per_1k: '' };
   if (k === 'budget_policy') return { fail_mode: 'sticky', closed_grace_seconds: 60 };
   if (k === 'usage_accounting') return { exclude_estimated_usage: false };
@@ -242,6 +245,14 @@ function openEdit(e) {
   editing.value = { original: e };
   const f = JSON.parse(JSON.stringify(e));
   const k = activeKind.value;
+  if (k === 'teams' || k === 'users') {
+    f.tags_text = e.tags && Object.keys(e.tags).length ? JSON.stringify(e.tags, null, 2) : '';
+  }
+  if (k === 'budgets') {
+    f.tag_text = e.tag ? JSON.stringify(e.tag, null, 2) : '';
+    if (!f.scope) f.scope = 'api_key';
+    if (!f.period) f.period = 'day';
+  }
   if (k === 'pricing') {
     f.input_per_1k = e.input_per_1k ?? '';
     f.output_per_1k = e.output_per_1k ?? '';
@@ -340,6 +351,32 @@ function buildEntry() {
   const f = JSON.parse(JSON.stringify(form.value));
   const k = activeKind.value;
 
+  if (k === 'teams' || k === 'users') {
+    if (!String(f.name || '').trim()) throw new Error(t('common.required'));
+    const tags = parseJsonObj(f.tags_text, 'tags');
+    const out = clean({ name: f.name, tags: tags && Object.keys(tags).length ? tags : undefined });
+    // The server merges, so omitting a field keeps it — clearing the box has to
+    // say "remove" explicitly, or a cleared tag would silently survive.
+    if (!out.tags && editing.value?.original?.tags) out.tags = null;
+    return out;
+  }
+  if (k === 'budgets') {
+    if (!f.period) throw new Error(t('common.required'));
+    const out = clean({ scope: f.scope, period: f.period });
+    if (f.scope === 'tag') {
+      const tag = parseJsonObj(f.tag_text, 'tag');
+      if (!tag || !Object.keys(tag).length) throw new Error(t('common.required'));
+      out.tag = tag;
+    } else if (f.scope !== 'org' && f.scope !== 'environment') {
+      // The schema pairs scope with exactly one of tag / scope_ref, and org and
+      // environment take neither.
+      if (!String(f.scope_ref || '').trim()) throw new Error(t('common.required'));
+      out.scope_ref = f.scope_ref;
+    }
+    if (!out.tag && editing.value?.original?.tag) out.tag = null;
+    if (!out.scope_ref && editing.value?.original?.scope_ref) out.scope_ref = null;
+    return out;
+  }
   if (k === 'pricing') {
     // All three are required, and an empty number box must not become 0 — that
     // would silently price the model at nothing.
@@ -1209,6 +1246,75 @@ onMounted(() => {
               {{ FH('usage_accounting', 'exclude_estimated_usage') }}
             </p>
           </div>
+        </template>
+
+        <!-- teams: a name, and cost-attribution tags -->
+        <template v-else-if="activeKind === 'teams'">
+          <div class="form-row">
+            <label>{{ FL('teams', 'name') }} *</label>
+            <input v-model="form.name" />
+            <p v-if="FH('teams', 'name')" class="fh">{{ FH('teams', 'name') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('teams', 'tags') }}</label>
+            <textarea v-model="form.tags_text" rows="3" style="flex: 1" placeholder='{&#34;dept&#34;: &#34;research&#34;}' />
+            <p v-if="FH('teams', 'tags')" class="fh">{{ FH('teams', 'tags') }}</p>
+          </div>
+        </template>
+
+        <!-- members: the same shape, different owner field -->
+        <template v-else-if="activeKind === 'users'">
+          <div class="form-row">
+            <label>{{ FL('users', 'name') }} *</label>
+            <input v-model="form.name" />
+            <p v-if="FH('users', 'name')" class="fh">{{ FH('users', 'name') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('users', 'tags') }}</label>
+            <textarea v-model="form.tags_text" rows="3" style="flex: 1" placeholder='{&#34;dept&#34;: &#34;research&#34;}' />
+            <p v-if="FH('users', 'tags')" class="fh">{{ FH('users', 'tags') }}</p>
+          </div>
+        </template>
+
+        <!-- budgets: a hard cap, whose exhausted marker the control plane writes -->
+        <template v-else-if="activeKind === 'budgets'">
+          <p class="warn-box" style="margin-bottom: 12px">{{ t('resources.budgetFileMode') }}</p>
+          <div class="form-row">
+            <label>{{ FL('budgets', 'scope') }}</label>
+            <select v-model="form.scope">
+              <option value="org">org（整个组织）</option>
+              <option value="environment">environment（整个环境）</option>
+              <option value="api_key">api_key（一把调用方密钥）</option>
+              <option value="member">member（一个成员）</option>
+              <option value="team">team（一个团队）</option>
+              <option value="team_member">team_member（团队里每个成员）</option>
+              <option value="tag">tag（按标签）</option>
+              <option value="provider_key">provider_key（一把上游密钥）</option>
+            </select>
+            <p v-if="FH('budgets', 'scope')" class="fh">{{ FH('budgets', 'scope') }}</p>
+          </div>
+          <div class="form-row" v-if="form.scope === 'tag'">
+            <label>{{ FL('budgets', 'tag') }} *</label>
+            <textarea v-model="form.tag_text" rows="2" style="flex: 1" placeholder='{&#34;key&#34;: &#34;dept&#34;, &#34;value&#34;: &#34;research&#34;}' />
+            <p v-if="FH('budgets', 'tag')" class="fh">{{ FH('budgets', 'tag') }}</p>
+          </div>
+          <div class="form-row" v-else-if="form.scope !== 'org' && form.scope !== 'environment'">
+            <label>{{ FL('budgets', 'scope_ref') }} *</label>
+            <input v-model="form.scope_ref" />
+            <p v-if="FH('budgets', 'scope_ref')" class="fh">{{ FH('budgets', 'scope_ref') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('budgets', 'period') }}</label>
+            <select v-model="form.period">
+              <option value="day">day（每天）</option>
+              <option value="week">week（每周）</option>
+              <option value="month">month（每月）</option>
+            </select>
+            <p v-if="FH('budgets', 'period')" class="fh">{{ FH('budgets', 'period') }}</p>
+          </div>
+          <p v-if="editing?.original?.exhausted" class="muted" style="font-size: 12px">
+            {{ t('resources.budgetExhaustedKept') }}
+          </p>
         </template>
 
         <!-- collections the form does not model -->

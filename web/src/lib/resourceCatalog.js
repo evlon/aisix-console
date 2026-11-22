@@ -55,10 +55,13 @@ export const KINDS = [
 
   // ── meter: what it cost and where the usage goes ──
   { key: 'pricing', group: 'meter' },
-  { key: 'budgets', group: 'meter', rawOnly: true },
+  { key: 'budgets', group: 'meter' },
   { key: 'budget_policy', group: 'meter' },
   { key: 'usage_accounting', group: 'meter' },
-  { key: 'observability_exporters', group: 'meter' },
+  // Its form lives in ExporterForm.vue, not in this page's field list: which
+  // fields exist depends on the destination kind. Flagged so the "every kind has
+  // a form" check knows it is not a gap.
+  { key: 'observability_exporters', group: 'meter', formElsewhere: true },
 ];
 
 export const KIND_KEYS = KINDS.map((k) => k.key);
@@ -261,6 +264,13 @@ export const FORM_FIELDS = {
   pricing: ['key', 'input_per_1k', 'output_per_1k'],
   budget_policy: ['fail_mode', 'closed_grace_seconds'],
   usage_accounting: ['exclude_estimated_usage'],
+  teams: ['name', 'tags'],
+  users: ['name', 'tags'],
+  // The schema is a set of mutually exclusive shapes: `tag` for scope=tag, a
+  // `scope_ref` for the scopes that point at a record, and neither for org and
+  // environment. `exhausted`/`exhausted_members` are written by the control plane
+  // and are deliberately not modelled.
+  budgets: ['scope', 'scope_ref', 'tag', 'period'],
 
   // The kinds maintained on the Policies page. Listed here in full, including the
   // fields whose labels that page used to keep in its own `policies.*` keys —

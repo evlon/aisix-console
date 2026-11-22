@@ -303,6 +303,10 @@ export default {
       'This policy uses the id form (allow_ids / deny_ids). The gateway reads only the id lists and ignores the name lists, so editing the allow list here has no effect — edit it through Raw YAML, or remove the id lists first.',
     mcpAllowRequired:
       'The allow list cannot be empty: an empty list forbids everything at this layer rather than meaning "unrestricted". Use * to allow everything, or Raw YAML if you really mean to forbid all.',
+    budgetFileMode:
+      'Note: a budget is not enforced in file mode. The exhausted marker is written by the control plane at runtime, and a gateway loading this file has nothing to write it — upstream\'s exporter warns about exactly this. Treating it as "configured means blocked" is the biggest misunderstanding in this group.',
+    budgetExhaustedKept:
+      'This row carries a control-plane written exhausted marker; the form does not touch it, and a save keeps it as it is.',
   },
   playground: {
     title: 'Playground',

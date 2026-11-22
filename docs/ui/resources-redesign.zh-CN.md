@@ -420,6 +420,13 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 | **字段说明文字** | 68 个表单行各一行说明（输入框下方、跨第二列），中英各 50 条（46 共享 + 4 按资源覆盖）。测试要求**每个字段都有说明**，且**没有无人使用的说明文案** |
 | **「策略」页浏览层** | 复用同一套六问说明带（`ResourceFacts`，文案直接复用）；表格列定义抽到 `PAGE_COLS`，表头由 `resourceCatalog.col.*` 解析 —— 原先中文界面里显示 `SCOPE_REF`/`APPLIES_TO`/`HOOK_POINT` |
 | **「策略」页表单** | 三张表单（护栏 / 限流 / 缓存）**112 处标签**全部改走目录文案，含 48 个护栏厂商字段（`access_key_id`、`analyzer_url`、`halt_on_blocklist_hit` 等）；每个字段一行说明；页内 26 个旧标签键删除 |
+| **补齐「只有原始 YAML」的 7 种** | `mcp_policies`、`pricing`、`budget_policy`、`usage_accounting`、`teams`、`users`、`budgets` 全部有了表单（字段按上游 schema 逐个核对）。**21 种资源现在都有表单，或由专属页面维护** |
+
+**修掉的两个只有渲染才能发现的缺陷之外，还有一个 P0 起就潜伏的缺陷**：
+`teams` 与 `users` 既没有表单分支、也没有被标记为「只有原始 YAML」——它们在目录里写着「在本页维护」，
+点进去却是**空表单**，新建被「必填」拦住、编辑被一个无关字段拦住。原因是 `buildEntry()` 的末尾是
+**无条件的 claim_mappings 逻辑**，任何没被前面分支接住的 kind 都会落到那里。已修，并补了一条守卫：
+**每种资源必须是（有专属页面 / 只有原始 YAML / 有表单）三者之一**。
 | 修掉的真缺陷 | `Dashboard.vue` 里「被拒绝的资源」表头写成「上游密钥」——抽取共用组件后由构造消除 |
 | 测试 | 新增 `server/test/effectChecks.test.js`(23) 与 `web/test/resourceCatalog.test.js`(12)；**server 83 项、web 34 项全通过** |
 | 构建 | `npx vite build` 通过 |

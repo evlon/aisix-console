@@ -193,6 +193,8 @@ export default {
       anonymousAggregateEntry: 'Allow anonymous on the aggregate entry',
       match: 'Match conditions',
       resolveApiKey: 'API key to map onto',
+      tags: 'Cost-attribution tags (JSON)',
+      tag: 'Limit by tag (JSON)',
     },
 
     // ── form field help ── see the note in zh-CN.js
@@ -341,6 +343,10 @@ export default {
       },
       teams: {
         label: 'Teams',
+        fieldHelp: {
+          name: 'The team name. A key points at it through team_id, which holds its id — if the two disagree nothing is configured, and metrics still say unknown.',
+          tags: 'JSON key/value pairs. Keys must be lowercase, start with a letter, contain only letters, digits and underscores, and be at most 63 characters; values are 1–128 characters; at most 32 entries. For the same key the order is: the caller\'s own tags, then a JWT\'s tag_claims, then the team, then the member.',
+        },
         oneLiner: 'A team name and cost-attribution tags. It affects labels and attribution only; it takes no part in authentication or routing.',
         whenNeeded: 'Configure this to label metrics and bills by team, or to rate-limit and budget along the tag dimension.',
         effect: 'The team_name in metrics resolves from it; team tags can be matched by the tag dimension of rate limits and budgets.',
@@ -355,6 +361,10 @@ export default {
       },
       users: {
         label: 'Members',
+        fieldHelp: {
+          name: 'The member name. A key points at it through user_id, which holds its id — if the two disagree nothing is configured.',
+          tags: 'JSON key/value pairs, same rules as a team; a member\'s tags rank below the owning team\'s.',
+        },
         oneLiner: 'A member name and cost-attribution tags. Likewise it takes no part in authentication or routing, affecting labels and attribution only.',
         whenNeeded: 'Configure this to break usage down by member, or to rate-limit and budget with the member / team_member scope.',
         effect: 'The user_name in metrics resolves from it, and it takes precedence over the key\'s own user_name field.',
@@ -650,6 +660,12 @@ export default {
       },
       budgets: {
         label: 'Budgets',
+        fieldHelp: {
+          scope: 'Whose spending is capped: the whole organisation, the environment, one key, one member, one team, every member of a team, a tag, or one upstream key. Choose the tag scope and you fill the tag below; for the others (except organisation and environment) you fill a scope target.',
+          scope_ref: 'The id of the record the choice above points at. Not needed for organisation, environment or the tag scope.',
+          tag: 'An object with key and value. With this you cannot also set a scope target — exactly one of the two.',
+          period: 'The accounting period, on the UTC calendar (00:00 daily, Monday 00:00 weekly, the 1st monthly). The block lifts by itself when the period rolls over.',
+        },
         oneLiner: 'A hard-stop spend ceiling, plus the mark of whether it is exhausted right now.',
         whenNeeded: 'Configure this to total spend per period and hard-stop traffic at the ceiling. Only hard-stop budgets exist: an alert-only budget never blocks a request, so it has no document.',
         effect: 'When managed by the control plane: the exhausted mark is set and the period start belongs to the current period → the request is rejected with 429 and error code budget_exceeded, carrying the scope, ceiling, spent amount and reset time. The period boundary lifts it automatically.',

@@ -191,6 +191,8 @@ export default {
       anonymousAggregateEntry: '聚合入口也允许匿名',
       match: '匹配条件',
       resolveApiKey: '映射到哪把密钥',
+      tags: '成本归属标签（JSON）',
+      tag: '按标签限定（JSON）',
     },
 
     // ── form field help ──
@@ -344,6 +346,10 @@ export default {
       },
       teams: {
         label: '团队',
+        fieldHelp: {
+          name: '团队名。密钥通过 team_id 指向它的 id —— 两者不一致等于没配（指标里仍是 unknown）。',
+          tags: 'JSON 键值对。键要匹配「小写字母开头、只含小写字母数字下划线、最长 63 字符」，值 1–128 字符，最多 32 条。同一个键的优先级：调用方自己的标签 > JWT 的 tag_claims > 团队 > 成员。',
+        },
         oneLiner: '团队名与成本归属标签。它只影响标签与归属，不参与认证、不参与路由。',
         whenNeeded: '要把指标、账单按团队打标签，或用 tag 维度限流、设预算时配置。',
         effect: '指标里的 team_name 由它解析；团队标签可用于限流与预算的 tag 维度匹配。',
@@ -358,6 +364,10 @@ export default {
       },
       users: {
         label: '成员',
+        fieldHelp: {
+          name: '成员名。密钥通过 user_id 指向它的 id —— 两者不一致等于没配。',
+          tags: 'JSON 键值对，规则与团队相同；优先级上，成员标签低于所属团队。',
+        },
         oneLiner: '成员名与成本归属标签。同样不参与认证与路由，只影响标签与归属。',
         whenNeeded: '要按成员统计用量，或用 member / team_member 作用域限流、设预算时配置。',
         effect: '指标里的 user_name 由它解析，它优先于 key 自身的 user_name 字段。',
@@ -652,6 +662,12 @@ export default {
       },
       budgets: {
         label: '预算',
+        fieldHelp: {
+          scope: '预算卡在谁头上：整个组织、整个环境、一把密钥、一个成员、一个团队、团队里每个成员、某个标签，或一把上游密钥。选「按标签」时填下面的标签，其余（组织与环境除外）填作用对象。',
+          scope_ref: '上面那一项指向的记录 id。选「组织」「环境」和「按标签」时不需要填。',
+          tag: '一个含 key 与 value 的对象。用了它就不能再填作用对象 —— 两者只能有一个。',
+          period: '统计周期，按 UTC 日历算（每天 00:00、每周一 00:00、每月 1 日 00:00）。周期一过，阻断自动解除。',
+        },
         oneLiner: '一份「硬停」的花费上限，外加「它现在是否已耗尽」的标记。',
         whenNeeded: '按周期统计花费、到上限要硬停流量时配置。只存在硬停预算：只会告警的预算从不拦请求，因此没有文档。',
         effect: '控制面托管时：标记已耗尽且周期起点属于当前周期 → 请求被拒，429，错误码 budget_exceeded，并带上作用范围、上限、已花费、恢复时间。周期边界自动解封。',
