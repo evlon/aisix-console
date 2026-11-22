@@ -232,7 +232,9 @@ export default {
     modelNamePlaceholder: 'model name',
     emptyDeniesAll: 'empty denies all models; * allows all',
     expiresAt: 'Expires at',
-    rateLimitRpm: 'Rate limit rpm',
+    rateLimitRpm: 'Rate limit (requests / tokens / concurrency)',
+    rateLimitHint:
+      'rpm/rps/rph/rpd are request windows, tpm/tpd are token windows and concurrency is the in-flight cap. Empty means the dimension is not set; clearing one that had a value removes it. There is no per-hour or per-second token limit upstream, so tpm/tpd are the only token windows.',
     immutableHint: 'The key is immutable — delete and recreate to rotate.',
     revealWarning: '⚠️ This plaintext is shown only once and cannot be viewed again. Save it now.',
     copyAndClose: 'Copy & close',

@@ -143,6 +143,8 @@ export default {
       claimMappingProviderMissing:
         '"{name}" names a provider that does not exist, so the mapping is never evaluated and tokens from that identity always end up 401.',
       pricingUnused: '"{key}" is not referenced by any model\'s pricing_key, so it has no effect.',
+      apiKeyAllowedModelUnknown:
+        '"{name}" allows a model called "{model}", but no model has that name: calls with it answer 403 while the key\'s model list comes back empty — usually a model was renamed and the reference was not updated.',
     },
 
     // ── the 21 kinds ──

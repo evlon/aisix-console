@@ -51,10 +51,16 @@ export const api = {
   derivedIds: (kind) => request(`/api/resources/${kind}/derived-ids`),
   listProviderModels: (name) => request(`/api/provider-models/${encodeURIComponent(name)}`),
   create: (kind, entry) => request(`/api/resources/${kind}`, { method: 'POST', body: JSON.stringify({ entry }) }),
-  update: (kind, identity, entry) =>
+  // `mode` decides how the submitted entry is applied. The server merges by
+  // default, because a form models only part of a resource and replacing the row
+  // wholesale used to delete everything it did not know about (an API key lost
+  // its tpm/tpd caps on a rename). Pass mode: 'replace' when the payload really
+  // is the whole entry — the raw-YAML tab does, since editing raw YAML is how you
+  // remove a field by hand.
+  update: (kind, identity, entry, { mode = 'merge' } = {}) =>
     request(`/api/resources/${kind}/${encodeURIComponent(identity)}`, {
       method: 'PUT',
-      body: JSON.stringify({ entry }),
+      body: JSON.stringify({ entry, mode }),
     }),
   remove: (kind, identity) =>
     request(`/api/resources/${kind}/${encodeURIComponent(identity)}`, { method: 'DELETE' }),

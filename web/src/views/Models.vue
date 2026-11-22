@@ -265,7 +265,28 @@ function parseJsonObj(text, label) {
 function buildEntry() {
   const f = form.value;
   const c = f.common;
+  const isEdit = !!editing.value?.display_name;
   const entry = { display_name: f.display_name };
+
+  // A save can change a model's SHAPE. The server now merges (it used to replace
+  // the row wholesale, which silently deleted the fields the form does not
+  // model), so the shapes this save does not use have to be removed explicitly —
+  // otherwise the previous shape survives alongside the new one and the
+  // gateway's oneOf rejects the row.
+  if (isEdit) {
+    for (const shape of ['routing', 'ensemble', 'semantic']) {
+      if (f.shape !== shape) entry[shape] = null;
+    }
+    if (f.shape !== 'direct') {
+      // The direct shape's required trio. Both spellings: the form sends the v1
+      // name and the console rewrites it to the id field, so nulling only one
+      // can leave the stored id behind.
+      entry.provider = null;
+      entry.model_name = null;
+      entry.provider_key = null;
+      entry.provider_key_id = null;
+    }
+  }
 
   const rl = {};
   for (const k of ['rps', 'rpm', 'rph', 'rpd', 'tpm', 'tpd', 'concurrency']) {
@@ -715,7 +736,7 @@ onMounted(load);
         <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}{{ lastResult.notice ? t('common.sep') + lastResult.notice : '' }}
       </div>
     </Modal>
   </div>

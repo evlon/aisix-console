@@ -272,6 +272,41 @@ script run wipes whatever you edited in the console.
 generate it with a script, let the console take over once the script has run; if
 you need to regenerate, back up the console-side edits first.
 
+## Editing one entry is a partial update, not a replacement
+
+Saving a resource through a **structured form** submits only the fields that form
+models, and the server merges them into the stored entry: fields the submission
+does not mention keep their value. So renaming something no longer deletes the
+fields the form happens not to model.
+
+This behaviour was **fixed**, not designed in. It used to replace the row
+wholesale (`arr[idx] = entry`), and the consequence was hard to notice: the API
+key form has no `tpm`/`tpd`, so renaming a key in the UI silently removed its
+token caps — HTTP 200, "saved" on screen. `tpm` is precisely the limit that stops
+one caller from consuming the whole token quota.
+
+The rules:
+
+- An explicit `null` in the submission DELETES that field. It is the only way to
+  clear a value — omitting a field means "leave it alone".
+- When the payload really is the whole entry, send
+  `"mode": "replace"` on `PUT /api/resources/<kind>/<identity>`. The console's
+  "Raw YAML" tab takes that path, because editing raw YAML is how you remove a
+  field by hand.
+- Both modes report in the response:
+  - `preserved`: the paths that were kept. **Paths only, never values** —
+    `provider_keys[].api_key` and `mcp_servers.secret` are plaintext in this file,
+    and a save response must not become a way to read them back.
+  - `renamed`: the references updated when a model is renamed (each key's
+    `allowed_models`, routing/ensemble/semantic members, and the `model:<name>`
+    form in `cache_policies.applies_to`).
+  - `notice`: that sentence, ready for a human; the UI shows it after "saved".
+
+**Why a rename has to propagate**: models are referenced by name, so after a
+rename the old name answers 404 (as if the model were gone) while the new name
+answers 403 (as if the key lacked permission). Neither points at the cause, and
+the caller's model list comes back empty.
+
 ## `config.yaml` does not interpolate `${VAR}`
 
 Only the **resources file** goes through `${VAR}` interpolation — that lives in

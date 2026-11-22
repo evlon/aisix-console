@@ -24,7 +24,10 @@ const form = ref({
   allowed_models: ['*'],
   expires_at: '',
   disabled: false,
-  rate_rpm: '',
+  // Every dimension the gateway's RateLimit actually has. `tpm`/`tpd` used to be
+  // missing here, which is how an operator could neither see nor restore the
+  // token cap that stops one caller consuming the whole quota.
+  rate_limit: emptyRateLimit(),
   // aisix >=1.1.0 extras
   allowed_agents: '',
   allowed_routes: '',
@@ -35,8 +38,13 @@ const form = ref({
   user_name: '',
   mcp_access_allow: '',
   mcp_access_deny: '',
-  mcp_rate_limits: [], // [{ server, rpm, rps, rph, rpd, concurrency }]
+  mcp_rate_limits: [], // [{ server, rpm, rps, rph, rpd, tpm, tpd, concurrency }]
 });
+
+// The gateway's RateLimit dimensions. There is no per-hour or per-second TOKEN
+// limit upstream, so tpm/tpd are the only token windows.
+const RATE_DIMS = ['rpm', 'rps', 'rph', 'rpd', 'tpm', 'tpd', 'concurrency'];
+const emptyRateLimit = () => Object.fromEntries(RATE_DIMS.map((d) => [d, '']));
 
 const emptyAdvanced = () => ({
   allowed_agents: '',
@@ -72,7 +80,7 @@ async function load() {
 }
 
 function openCreate() {
-  form.value = { display_name: '', mode: 'generate', importPlaintext: '', envRef: '', allowed_models: ['*'], expires_at: '', disabled: false, rate_rpm: '', ...emptyAdvanced() };
+  form.value = { display_name: '', mode: 'generate', importPlaintext: '', envRef: '', allowed_models: ['*'], expires_at: '', disabled: false, rate_limit: emptyRateLimit(), ...emptyAdvanced() };
   editing.value = {};
   lastResult.value = null;
   generatedPlaintext.value = '';
@@ -81,11 +89,7 @@ function openCreate() {
 function openEdit(e) {
   const mrl = Object.entries(e.mcp_rate_limits ?? {}).map(([server, v]) => ({
     server,
-    rpm: v.rpm ?? '',
-    rps: v.rps ?? '',
-    rph: v.rph ?? '',
-    rpd: v.rpd ?? '',
-    concurrency: v.concurrency ?? '',
+    ...Object.fromEntries(RATE_DIMS.map((d) => [d, v?.[d] ?? ''])),
   }));
   form.value = {
     display_name: e.display_name ?? '',
@@ -95,7 +99,7 @@ function openEdit(e) {
     allowed_models: [...(e.allowed_models ?? [])],
     expires_at: e.expires_at ?? '',
     disabled: !!e.disabled,
-    rate_rpm: e.rate_limit?.rpm ?? '',
+    rate_limit: Object.fromEntries(RATE_DIMS.map((d) => [d, e.rate_limit?.[d] ?? ''])),
     allowed_agents: (e.allowed_agents ?? []).join(', '),
     allowed_routes: (e.allowed_routes ?? []).join(', '),
     jwt_provider: e.jwt_provider ?? '',
@@ -129,48 +133,68 @@ async function save() {
     lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
+  // Every field this form OWNS is sent explicitly, and a cleared one is sent as
+  // null. Two bugs came from the opposite arrangement: an empty field was simply
+  // omitted and the server replaced the row wholesale, so everything the form did
+  // not model was silently deleted (the tpm/tpd token caps went on a rename); and
+  // once the server started merging, omission would mean "leave alone", so nothing
+  // could be cleared at all. Fields this form does NOT model (tags,
+  // allowed_model_ids, allow_all_models) stay omitted on purpose — that is what
+  // makes the merge preserve them.
+  const isEdit = !!editing.value?.display_name;
   const entry = {
     display_name: form.value.display_name,
     allowed_models: form.value.allowed_models.map((m) => m.trim()).filter(Boolean),
   };
-  if (form.value.rate_rpm !== '') entry.rate_limit = { rpm: Number(form.value.rate_rpm) };
-  if (form.value.expires_at) entry.expires_at = new Date(form.value.expires_at).toISOString();
-  if (form.value.disabled) entry.disabled = true;
+  const set = (key, value) => {
+    const empty = value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length);
+    if (empty) {
+      if (isEdit) entry[key] = null;
+      return;
+    }
+    entry[key] = value;
+  };
 
-  // aisix >=1.1.0 extras — attach only when set (empty = omit, so editing
-  // never drops a field the form does not model).
-  const agents = strArr(form.value.allowed_agents);
-  if (agents.length) entry.allowed_agents = agents;
-  const routes = strArr(form.value.allowed_routes);
-  if (routes.length) entry.allowed_routes = routes;
-  if (form.value.jwt_provider) entry.jwt_provider = form.value.jwt_provider;
-  if (form.value.jwt_subject) entry.jwt_subject = form.value.jwt_subject;
-  if (form.value.team_id) entry.team_id = form.value.team_id;
-  if (form.value.user_id) entry.user_id = form.value.user_id;
-  if (form.value.user_name) entry.user_name = form.value.user_name;
-  // mcp_access: multiline glob lists -> { allow, deny } (omit if both empty).
+  const limits = {};
+  for (const dim of RATE_DIMS) {
+    const v = form.value.rate_limit?.[dim];
+    if (v !== '' && v !== undefined && v !== null) limits[dim] = Number(v);
+  }
+  set('rate_limit', Object.keys(limits).length ? limits : '');
+  set('expires_at', form.value.expires_at ? new Date(form.value.expires_at).toISOString() : '');
+  set('disabled', form.value.disabled ? true : '');
+
+  // aisix >=1.1.0 extras.
+  set('allowed_agents', strArr(form.value.allowed_agents));
+  set('allowed_routes', strArr(form.value.allowed_routes));
+  set('jwt_provider', form.value.jwt_provider);
+  set('jwt_subject', form.value.jwt_subject);
+  set('team_id', form.value.team_id);
+  set('user_id', form.value.user_id);
+  set('user_name', form.value.user_name);
+
+  // mcp_access: multiline glob lists -> { allow, deny }.
   const allow = strArr(form.value.mcp_access_allow);
   const deny = strArr(form.value.mcp_access_deny);
-  if (allow.length || deny.length) {
-    entry.mcp_access = {};
-    if (allow.length) entry.mcp_access.allow = allow;
-    if (deny.length) entry.mcp_access.deny = deny;
-  }
+  const mcpAccess = {};
+  if (allow.length) mcpAccess.allow = allow;
+  if (deny.length) mcpAccess.deny = deny;
+  set('mcp_access', Object.keys(mcpAccess).length ? mcpAccess : '');
+
   // mcp_rate_limits: [{server, rpm, ...}] -> { "<server>": { rpm, ... } }.
   const mrl = {};
   for (const row of form.value.mcp_rate_limits) {
     const server = (row.server || '').trim();
     if (!server) continue;
-    const limits = {};
-    for (const dim of ['rpm', 'rps', 'rph', 'rpd', 'concurrency']) {
+    const dims = {};
+    for (const dim of RATE_DIMS) {
       const v = row[dim];
-      if (v !== '' && v !== undefined && v !== null) limits[dim] = Number(v);
+      if (v !== '' && v !== undefined && v !== null) dims[dim] = Number(v);
     }
-    if (Object.keys(limits).length) mrl[server] = limits;
+    if (Object.keys(dims).length) mrl[server] = dims;
   }
-  if (Object.keys(mrl).length) entry.mcp_rate_limits = mrl;
+  set('mcp_rate_limits', Object.keys(mrl).length ? mrl : '');
 
-  const isEdit = !!editing.value?.display_name;
   if (isEdit) {
     // editing an existing key: key_hash is immutable — keep it
     entry.key_hash = editing.value.key_hash;
@@ -365,8 +389,18 @@ onMounted(load);
         </div>
         <div class="form-row">
           <label>{{ t('apiKeys.rateLimitRpm') }}</label>
-          <input v-model="form.rate_rpm" type="number" />
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <input
+              v-for="d in RATE_DIMS"
+              :key="d"
+              v-model="form.rate_limit[d]"
+              type="number"
+              :placeholder="d"
+              style="width: 96px"
+            />
+          </div>
         </div>
+        <p class="muted" style="margin: -4px 0 12px; font-size: 12px">{{ t('apiKeys.rateLimitHint') }}</p>
         <div class="form-row">
           <label>{{ t('common.disabled') }}</label>
           <label style="justify-self: start"><input type="checkbox" v-model="form.disabled" /></label>
@@ -423,11 +457,14 @@ onMounted(load);
                   <option value="">选择 MCP 服务器…</option>
                   <option v-for="s in mcpServers" :key="s" :value="s">{{ s }}</option>
                 </select>
-                <input v-model="row.rpm" type="number" placeholder="rpm" style="width: 70px" />
-                <input v-model="row.rps" type="number" placeholder="rps" style="width: 70px" />
-                <input v-model="row.rph" type="number" placeholder="rph" style="width: 70px" />
-                <input v-model="row.rpd" type="number" placeholder="rpd" style="width: 70px" />
-                <input v-model="row.concurrency" type="number" placeholder="并发" style="width: 70px" />
+                <input
+                  v-for="d in RATE_DIMS"
+                  :key="d"
+                  v-model="row[d]"
+                  type="number"
+                  :placeholder="d"
+                  style="width: 70px"
+                />
                 <button @click="removeMcpRateLimit(i)">✕</button>
               </div>
               <button @click="addMcpRateLimit">+ 添加服务器限额</button>
@@ -441,7 +478,7 @@ onMounted(load);
           <button class="primary" :disabled="saving" @click="save">{{ saving ? t('common.saving') : t('common.saveAndReload') }}</button>
         </div>
         <div v-if="lastResult && lastResult.ok && !generatedPlaintext" class="badge ok" style="margin-top: 10px">
-          {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}
+          {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}{{ lastResult.notice ? t('common.sep') + lastResult.notice : '' }}
         </div>
       </template>
     </Modal>

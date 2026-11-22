@@ -23,6 +23,8 @@ import {
 } from '../resources.js';
 import * as secrets from '../secrets.js';
 import { runEffectChecks } from '../effectChecks.js';
+import { mergeEntry, preservedPaths } from '../entryMerge.js';
+import { propagateModelRename } from '../modelRename.js';
 
 export function resourcesRouter(ctx) {
   const router = Router();
@@ -224,11 +226,23 @@ export function resourcesRouter(ctx) {
     res.json({ entry: externalizeRefs(kind, doc[kind][idx], doc) });
   });
 
+  // PUT is a PARTIAL update by default.
+  //
+  // The console's forms model only part of each resource, and replacing the row
+  // wholesale silently deleted everything they do not know about — renaming an
+  // API key dropped its tpm/tpd token caps with HTTP 200 and "saved" on screen
+  // (see src/entryMerge.js). A caller that means "this is the whole entry" says
+  // so with mode: "replace"; the raw-YAML tab does, because editing raw YAML is
+  // exactly how you remove a field by hand.
   router.put('/:kind/:identity', async (req, res) => {
     const { kind, identity } = req.params;
     const { doc, error } = currentDoc();
     if (error) return res.status(409).json(error);
 
+    const mode = req.body?.mode ?? 'merge';
+    if (mode !== 'merge' && mode !== 'replace') {
+      return res.status(400).json({ errors: [{ scope: `(${kind})`, message: 'mode 只能是 merge 或 replace' }] });
+    }
     const raw = req.body?.entry ?? req.body;
     if (!raw || typeof raw !== 'object') {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: '请求体需包含资源对象' }] });
@@ -237,21 +251,49 @@ export function resourcesRouter(ctx) {
     if (prepared.error) {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: prepared.error }] });
     }
-    const entry = prepared.entry;
+    const arr = doc[kind];
+    const idx = findIndex(arr, kind, identity);
+    if (idx < 0) return res.status(404).json({ error: '未找到' });
+    const stored = arr[idx];
+
+    // Merge BEFORE the identity check, so a form that omits an unchanged
+    // identity field still resolves to this row.
+    const entry = mode === 'replace' ? prepared.entry : mergeEntry(stored, prepared.entry);
     const newIdentity = identityOf(kind, entry);
     if (!newIdentity) {
       return res.status(400).json({ errors: [{ scope: `(${kind})`, message: `缺少标识字段 ${identityFieldOf(kind) || 'identity'}` }] });
     }
-    const arr = doc[kind];
-    const idx = findIndex(arr, kind, identity);
-    if (idx < 0) return res.status(404).json({ error: '未找到' });
     const dupIdx = findIndex(arr, kind, newIdentity);
     if (dupIdx >= 0 && dupIdx !== idx) {
       return res.status(409).json({ errors: [{ scope: `${kind}[${dupIdx}] ("${newIdentity}")`, message: `${identityFieldOf(kind) || 'identity'} 与另一条目冲突` }] });
     }
+    // A model rename has to reach the resources that reference it by name, or
+    // every key scoped to the old name starts returning 403.
+    const renamed = kind === 'models' ? propagateModelRename(doc, stored, entry) : [];
+
+    const preserved = mode === 'replace'
+      ? []
+      // `id` is a format-v2 row requirement the console carries over itself
+      // (savePipeline's reconcileIds), not something an operator edits. Reporting
+      // it as "preserved" on every single save would turn this notice into noise,
+      // and a notice people learn to ignore is worse than none.
+      : preservedPaths(stored, prepared.entry).filter((p) => p !== 'id');
     arr[idx] = entry;
     const result = await saver.save(doc);
-    res.status(result.ok ? 200 : 409).json(result);
+    const notes = [];
+    if (preserved.length) {
+      notes.push(`本次提交未包含 ${preserved.length} 个既有字段，已按原值保留：${preserved.join('、')}`);
+    }
+    if (renamed.length) notes.push(`同步更新了 ${renamed.length} 处引用：${renamed.join('、')}`);
+    res.status(result.ok ? 200 : 409).json({
+      ...result,
+      // Paths only, never values: provider_keys.api_key and mcp_servers.secret
+      // are plaintext in this file, so a save response must not become a way to
+      // read them back.
+      preserved,
+      renamed,
+      notice: notes.length ? notes.join('；') : null,
+    });
   });
 
   router.delete('/:kind/:identity', async (req, res) => {

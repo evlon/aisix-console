@@ -145,6 +145,30 @@ test('a price row no model references is reported', () => {
   assert.deepEqual(codes(used), []);
 });
 
+test('a key scoped to a model that does not exist is reported', () => {
+  const doc = {
+    models: [{ display_name: 'dsv41' }],
+    api_keys: [{ display_name: 'k', allowed_models: ['dsv41', 'renamed-away'] }],
+  };
+  assert.deepEqual(codes(doc), ['apiKeyAllowedModelUnknown']);
+  assert.deepEqual(runEffectChecks(doc)[0].params, { name: 'k', model: 'renamed-away' });
+});
+
+test('wildcards and the narrower scoping fields are not reported', () => {
+  const models = [{ display_name: 'dsv41' }];
+  assert.deepEqual(codes({ models, api_keys: [{ display_name: 'k', allowed_models: ['*', 'openai/*'] }] }), []);
+  // allow_all_models beats allowed_models, so the stale list is ignored.
+  assert.deepEqual(
+    codes({ models, api_keys: [{ display_name: 'k', allow_all_models: true, allowed_models: ['gone'] }] }),
+    []
+  );
+  // Likewise allowed_model_ids, even an empty one, beats allowed_models.
+  assert.deepEqual(
+    codes({ models, api_keys: [{ display_name: 'k', allowed_model_ids: [], allowed_models: ['gone'] }] }),
+    []
+  );
+});
+
 test('a fully wired document raises nothing', () => {
   // The noise test: hints that fire on a healthy config are worse than no hints.
   const doc = {
@@ -192,6 +216,8 @@ test('every declared code is reachable, and nothing undeclared is emitted', () =
     users: [{ id: 'u1', name: 'u' }],
     claim_mappings: [{ name: 'm', jwt_provider: 'nope' }],
     pricing: [{ key: 'unused/x' }],
+    models: [{ display_name: 'exists' }],
+    api_keys: [{ display_name: 'k', allowed_models: ['gone'] }],
   };
   const docB = { mcp_servers: [{ name: 'ops', url: 'https://tools/mcp' }] };
 
@@ -228,6 +254,8 @@ test('the params each code emits match the declared contract', () => {
       users: [{ id: 'u', name: 'u' }],
       claim_mappings: [{ name: 'm', jwt_provider: 'nope' }],
       pricing: [{ key: 'k' }],
+      models: [{ display_name: 'm' }],
+      api_keys: [{ display_name: 'a', allowed_models: ['gone'] }],
     },
     { mcp_servers: [{ name: 's', url: 'https://x' }] },
   ];

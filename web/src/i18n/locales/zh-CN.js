@@ -238,7 +238,9 @@ export default {
     modelNamePlaceholder: '模型名',
     emptyDeniesAll: '留空表示拒绝所有；* 表示全部',
     expiresAt: '过期时间',
-    rateLimitRpm: '限流 rpm',
+    rateLimitRpm: '限流（请求/令牌/并发）',
+    rateLimitHint:
+      'rpm/rps/rph/rpd 是请求数窗口，tpm/tpd 是令牌窗口，concurrency 是并发。留空表示不设该维度；清空一个原本有值的维度会把它删掉。上游没有「每小时令牌」和「每秒令牌」，所以令牌窗口只有 tpm/tpd。',
     immutableHint: '密钥不可修改——需要更换请删除后重建。',
     revealWarning: '⚠️ 此明文只会显示这一次，关闭后无法再次查看。请立即保存。',
     copyAndClose: '复制并关闭',

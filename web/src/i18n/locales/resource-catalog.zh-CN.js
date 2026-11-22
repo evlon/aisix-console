@@ -138,6 +138,8 @@ export default {
       memberNoKey: '「{name}」没有任何密钥指向它（user_id）：针对成员的限流与预算匹配不到请求。',
       claimMappingProviderMissing: '「{name}」指定的提供方不存在，这条映射永远不会被评估，该身份的 token 一律 401。',
       pricingUnused: '「{key}」没有被任何模型的 pricing_key 引用，它不产生任何效果。',
+      apiKeyAllowedModelUnknown:
+        '「{name}」允许使用的模型里有「{model}」，但没有同名模型：这把密钥调用它会得到 403，而它的可用模型列表会是空的 —— 通常意味着模型改过名而没有同步。',
     },
 
     // ── the 21 kinds ──

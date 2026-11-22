@@ -37,6 +37,7 @@ export const CHECK_CODES = [
   'memberNoKey',
   'claimMappingProviderMissing',
   'pricingUnused',
+  'apiKeyAllowedModelUnknown',
 ];
 
 const rows = (doc, kind) => (Array.isArray(doc?.[kind]) ? doc[kind].filter((r) => r && typeof r === 'object') : []);
@@ -64,6 +65,7 @@ export const CHECK_PARAMS = {
   memberNoKey: ['name'],
   claimMappingProviderMissing: ['name'],
   pricingUnused: ['key'],
+  apiKeyAllowedModelUnknown: ['name', 'model'],
 };
 
 // A name a human recognises. Falls back to the id so a message is never bare.
@@ -197,6 +199,24 @@ export function runEffectChecks(doc) {
   for (const m of rows(doc, 'claim_mappings')) {
     if (m.jwt_provider && !providerNames.has(m.jwt_provider)) {
       push('claim_mappings', 'claimMappingProviderMissing', { name: label(m) });
+    }
+  }
+
+  // A key scoped to a model name that does not exist gets 403 on every call,
+  // while GET /v1/models comes back empty so the caller cannot see what they are
+  // allowed to use. This is the trace a rename leaves when it did not propagate
+  // — including when it happened in raw YAML, which has nothing to propagate
+  // from. Only non-wildcard entries are judged: `*` and `provider/*` match
+  // whatever exists.
+  const modelNames = new Set(rows(doc, 'models').map((m) => m.display_name).filter(Boolean));
+  for (const k of rows(doc, 'api_keys')) {
+    // The three scoping fields are not equal: allow_all_models beats
+    // allowed_model_ids beats allowed_models, so a row that uses a narrower one
+    // has its allowed_models ignored and flagging it would be noise.
+    if (k.allow_all_models === true || Array.isArray(k.allowed_model_ids)) continue;
+    for (const m of Array.isArray(k.allowed_models) ? k.allowed_models : []) {
+      if (typeof m !== 'string' || m === '' || m.includes('*')) continue;
+      if (!modelNames.has(m)) push('api_keys', 'apiKeyAllowedModelUnknown', { name: label(k), model: m });
     }
   }
 

@@ -580,6 +580,9 @@ async function save() {
   try {
     const original = editing.value?.original;
     const identity = original ? urlIdentityOf(original) : '';
+    // The form path merges (the server default): the form models only part of the
+    // entry, and a replace here would delete everything it does not show — which
+    // is how renaming an API key used to drop its tpm/tpd token caps.
     const result = identity
       ? await api.update(activeKind.value, identity, entry)
       : await api.create(activeKind.value, entry);
@@ -608,8 +611,10 @@ async function saveRaw() {
   try {
     const original = editing.value?.original;
     const identity = original ? urlIdentityOf(original) : '';
+    // The raw tab shows the whole entry, so it means replace — editing raw YAML
+    // is how a field gets removed by hand.
     const result = identity
-      ? await api.update(activeKind.value, identity, entry)
+      ? await api.update(activeKind.value, identity, entry, { mode: 'replace' })
       : await api.create(activeKind.value, entry);
     lastResult.value = result;
     if (result.ok) {
@@ -1242,7 +1247,7 @@ onMounted(() => {
         </button>
       </div>
       <div v-if="lastResult && lastResult.ok" class="badge ok" style="margin-top: 10px">
-        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}
+        {{ t('common.saved') }}{{ lastResult.reload?.warning ? t('common.sep') + lastResult.reload.warning : '' }}{{ lastResult.notice ? t('common.sep') + lastResult.notice : '' }}
       </div>
     </Modal>
   </div>
