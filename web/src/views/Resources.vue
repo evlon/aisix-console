@@ -852,6 +852,7 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('mcp_servers', 'name')" class="fh">{{ FH('mcp_servers', 'name') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'type') }}</label>
@@ -859,16 +860,19 @@ onMounted(() => {
               <option value="mcp">mcp</option>
               <option value="openapi">openapi</option>
             </select>
+            <p v-if="FH('mcp_servers', 'type')" class="fh">{{ FH('mcp_servers', 'type') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'url') }} *</label>
             <input v-model="form.url" placeholder="https://…/mcp" />
+            <p v-if="FH('mcp_servers', 'url')" class="fh">{{ FH('mcp_servers', 'url') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'transport') }}</label>
             <select v-model="form.transport">
               <option value="streamable_http">streamable_http</option>
             </select>
+            <p v-if="FH('mcp_servers', 'transport')" class="fh">{{ FH('mcp_servers', 'transport') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'auth_type') }}</label>
@@ -878,18 +882,22 @@ onMounted(() => {
               <option value="api_key">api_key</option>
               <option value="oauth2">oauth2</option>
             </select>
+            <p v-if="FH('mcp_servers', 'auth_type')" class="fh">{{ FH('mcp_servers', 'auth_type') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_type !== 'none'">
             <label>{{ FL('mcp_servers', 'secret') }}</label>
             <input v-model="form.secret" />
+            <p v-if="FH('mcp_servers', 'secret')" class="fh">{{ FH('mcp_servers', 'secret') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_type === 'oauth2'">
             <label>{{ FL('mcp_servers', 'client_id') }}</label>
             <input v-model="form.client_id" />
+            <p v-if="FH('mcp_servers', 'client_id')" class="fh">{{ FH('mcp_servers', 'client_id') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_type === 'oauth2'">
             <label>{{ FL('mcp_servers', 'token_url') }}</label>
             <input v-model="form.token_url" />
+            <p v-if="FH('mcp_servers', 'token_url')" class="fh">{{ FH('mcp_servers', 'token_url') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_type === 'oauth2'">
             <label>{{ FL('mcp_servers', 'scopes') }}</label>
@@ -900,26 +908,32 @@ onMounted(() => {
               </div>
               <button @click="form.scopes.push('')">+</button>
             </div>
+            <p v-if="FH('mcp_servers', 'scopes')" class="fh">{{ FH('mcp_servers', 'scopes') }}</p>
           </div>
           <div class="form-row" v-if="form.type === 'openapi'">
             <label>{{ FL('mcp_servers', 'spec') }} *</label>
             <textarea v-model="form.spec_text" rows="5" style="flex: 1" placeholder='{"openapi":"3.0.0",…}' />
+            <p v-if="FH('mcp_servers', 'spec')" class="fh">{{ FH('mcp_servers', 'spec') }}</p>
           </div>
           <div class="form-row" v-if="form.type === 'openapi' && form.auth_type === 'api_key'">
             <label>{{ FL('mcp_servers', 'api_key_header') }}</label>
             <input v-model="form.api_key_header" placeholder="X-API-Key" />
+            <p v-if="FH('mcp_servers', 'api_key_header')" class="fh">{{ FH('mcp_servers', 'api_key_header') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'timeout_ms') }}</label>
             <input v-model="form.timeout_ms" type="number" />
+            <p v-if="FH('mcp_servers', 'timeout_ms')" class="fh">{{ FH('mcp_servers', 'timeout_ms') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'forward_client_headers') }}</label>
             <input v-model="form.forward_client_headers" placeholder="x-user-id, x-tenant (逗号分隔)" />
+            <p v-if="FH('mcp_servers', 'forward_client_headers')" class="fh">{{ FH('mcp_servers', 'forward_client_headers') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_servers', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('mcp_servers', 'enabled')" class="fh">{{ FH('mcp_servers', 'enabled') }}</p>
           </div>
         </template>
 
@@ -928,10 +942,12 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('a2a_agents', 'name')" class="fh">{{ FH('a2a_agents', 'name') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'url') }} *</label>
             <input v-model="form.url" placeholder="https://…/a2a" />
+            <p v-if="FH('a2a_agents', 'url')" class="fh">{{ FH('a2a_agents', 'url') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'protocol_version') }}</label>
@@ -939,6 +955,7 @@ onMounted(() => {
               <option value="1.0">1.0</option>
               <option value="0.3">0.3</option>
             </select>
+            <p v-if="FH('a2a_agents', 'protocol_version')" class="fh">{{ FH('a2a_agents', 'protocol_version') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'auth_type') }}</label>
@@ -947,22 +964,27 @@ onMounted(() => {
               <option value="bearer">bearer</option>
               <option value="api_key">api_key</option>
             </select>
+            <p v-if="FH('a2a_agents', 'auth_type')" class="fh">{{ FH('a2a_agents', 'auth_type') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_type !== 'none'">
             <label>{{ FL('a2a_agents', 'secret') }}</label>
             <input v-model="form.secret" />
+            <p v-if="FH('a2a_agents', 'secret')" class="fh">{{ FH('a2a_agents', 'secret') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'timeout_ms') }}</label>
             <input v-model="form.timeout_ms" type="number" />
+            <p v-if="FH('a2a_agents', 'timeout_ms')" class="fh">{{ FH('a2a_agents', 'timeout_ms') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'forward_client_headers') }}</label>
             <input v-model="form.forward_client_headers" placeholder="x-user-id, x-tenant (逗号分隔)" />
+            <p v-if="FH('a2a_agents', 'forward_client_headers')" class="fh">{{ FH('a2a_agents', 'forward_client_headers') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('a2a_agents', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('a2a_agents', 'enabled')" class="fh">{{ FH('a2a_agents', 'enabled') }}</p>
           </div>
         </template>
 
@@ -971,10 +993,12 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('oidc_providers', 'name')" class="fh">{{ FH('oidc_providers', 'name') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'issuer') }} *</label>
             <input v-model="form.issuer" placeholder="https://…" />
+            <p v-if="FH('oidc_providers', 'issuer')" class="fh">{{ FH('oidc_providers', 'issuer') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'audiences') }} *</label>
@@ -985,18 +1009,22 @@ onMounted(() => {
               </div>
               <button @click="form.audiences.push('')">+</button>
             </div>
+            <p v-if="FH('oidc_providers', 'audiences')" class="fh">{{ FH('oidc_providers', 'audiences') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'jwks_uri') }}</label>
             <input v-model="form.jwks_uri" />
+            <p v-if="FH('oidc_providers', 'jwks_uri')" class="fh">{{ FH('oidc_providers', 'jwks_uri') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'hmac_secret') }}</label>
             <input v-model="form.hmac_secret" type="password" placeholder="共享密钥（HS256/384/512，≥32 字节）；设置后 issuer/audiences 可留空" />
+            <p v-if="FH('oidc_providers', 'hmac_secret')" class="fh">{{ FH('oidc_providers', 'hmac_secret') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'identity_claim') }}</label>
             <input v-model="form.identity_claim" placeholder="sub" />
+            <p v-if="FH('oidc_providers', 'identity_claim')" class="fh">{{ FH('oidc_providers', 'identity_claim') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'required_scopes') }}</label>
@@ -1007,18 +1035,22 @@ onMounted(() => {
               </div>
               <button @click="form.required_scopes.push('')">+</button>
             </div>
+            <p v-if="FH('oidc_providers', 'required_scopes')" class="fh">{{ FH('oidc_providers', 'required_scopes') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'bound_claims') }}</label>
             <textarea v-model="form.bound_claims_text" rows="4" style="flex: 1" placeholder='{"claim":"value"}' />
+            <p v-if="FH('oidc_providers', 'bound_claims')" class="fh">{{ FH('oidc_providers', 'bound_claims') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'leeway_secs') }}</label>
             <input v-model="form.leeway_secs" type="number" />
+            <p v-if="FH('oidc_providers', 'leeway_secs')" class="fh">{{ FH('oidc_providers', 'leeway_secs') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('oidc_providers', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('oidc_providers', 'enabled')" class="fh">{{ FH('oidc_providers', 'enabled') }}</p>
           </div>
         </template>
 
@@ -1042,6 +1074,7 @@ onMounted(() => {
               <option value="">选择护栏…</option>
               <option v-for="g in lookups.guardrails" :key="g" :value="g">{{ g }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'guardrail_id')" class="fh">{{ FH('guardrail_attachments', 'guardrail_id') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('guardrail_attachments', 'scope_type') }} *</label>
@@ -1053,6 +1086,7 @@ onMounted(() => {
               <option value="team">team</option>
               <option value="passthrough_route">passthrough_route</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_type')" class="fh">{{ FH('guardrail_attachments', 'scope_type') }}</p>
           </div>
           <div class="form-row" v-if="form.scope_type === 'model'">
             <label>{{ FL('guardrail_attachments', 'scope_id') }}</label>
@@ -1060,6 +1094,7 @@ onMounted(() => {
               <option value="">选择模型…</option>
               <option v-for="m in lookups.models" :key="m" :value="m">{{ m }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_id')" class="fh">{{ FH('guardrail_attachments', 'scope_id') }}</p>
           </div>
           <div class="form-row" v-else-if="form.scope_type === 'mcp_server'">
             <label>{{ FL('guardrail_attachments', 'scope_id') }}</label>
@@ -1067,6 +1102,7 @@ onMounted(() => {
               <option value="">选择 MCP 服务器…</option>
               <option v-for="m in lookups.mcp_servers" :key="m" :value="m">{{ m }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_id')" class="fh">{{ FH('guardrail_attachments', 'scope_id') }}</p>
           </div>
           <div class="form-row" v-else-if="form.scope_type === 'api_key'">
             <label>{{ FL('guardrail_attachments', 'scope_id') }}</label>
@@ -1074,6 +1110,7 @@ onMounted(() => {
               <option value="">选择调用方密钥…</option>
               <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_id')" class="fh">{{ FH('guardrail_attachments', 'scope_id') }}</p>
           </div>
           <div class="form-row" v-else-if="form.scope_type === 'team'">
             <label>{{ FL('guardrail_attachments', 'scope_id') }}</label>
@@ -1081,6 +1118,7 @@ onMounted(() => {
               <option value="">选择团队…</option>
               <option v-for="t in teamNames" :key="t" :value="t">{{ t }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_id')" class="fh">{{ FH('guardrail_attachments', 'scope_id') }}</p>
           </div>
           <div class="form-row" v-else-if="form.scope_type === 'passthrough_route'">
             <label>{{ FL('guardrail_attachments', 'scope_id') }}</label>
@@ -1088,14 +1126,17 @@ onMounted(() => {
               <option value="">选择透传路由…</option>
               <option v-for="p in lookups.passthrough_routes" :key="p" :value="p">{{ p }}</option>
             </select>
+            <p v-if="FH('guardrail_attachments', 'scope_id')" class="fh">{{ FH('guardrail_attachments', 'scope_id') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('guardrail_attachments', 'priority') }}</label>
             <input v-model="form.priority" type="number" />
+            <p v-if="FH('guardrail_attachments', 'priority')" class="fh">{{ FH('guardrail_attachments', 'priority') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('guardrail_attachments', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('guardrail_attachments', 'enabled')" class="fh">{{ FH('guardrail_attachments', 'enabled') }}</p>
           </div>
         </template>
 
@@ -1104,22 +1145,27 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('passthrough_routes', 'name')" class="fh">{{ FH('passthrough_routes', 'name') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'path_prefix') }}</label>
             <input v-model="form.path_prefix" placeholder="/passthrough/openai（以 / 开头）" />
+            <p v-if="FH('passthrough_routes', 'path_prefix')" class="fh">{{ FH('passthrough_routes', 'path_prefix') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'hosts') }}</label>
             <input v-model="form.hosts" placeholder="api.example.com, *.corp.com（逗号分隔）" />
+            <p v-if="FH('passthrough_routes', 'hosts')" class="fh">{{ FH('passthrough_routes', 'hosts') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'target_url') }}</label>
             <input v-model="form.target_url" placeholder="https://upstream.example.com（与 preserve_host 二选一）" />
+            <p v-if="FH('passthrough_routes', 'target_url')" class="fh">{{ FH('passthrough_routes', 'target_url') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'preserve_host') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.preserve_host" /></label>
+            <p v-if="FH('passthrough_routes', 'preserve_host')" class="fh">{{ FH('passthrough_routes', 'preserve_host') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'auth_mode') }}</label>
@@ -1128,10 +1174,12 @@ onMounted(() => {
               <option value="header_key">header_key（专用头）</option>
               <option value="anonymous">anonymous（匿名主体）</option>
             </select>
+            <p v-if="FH('passthrough_routes', 'auth_mode')" class="fh">{{ FH('passthrough_routes', 'auth_mode') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_mode === 'header_key'">
             <label>{{ FL('passthrough_routes', 'auth_header_name') }} *</label>
             <input v-model="form.auth_header_name" placeholder="x-aisix-api-key" />
+            <p v-if="FH('passthrough_routes', 'auth_header_name')" class="fh">{{ FH('passthrough_routes', 'auth_header_name') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_mode === 'anonymous'">
             <label>{{ FL('passthrough_routes', 'anonymous_key') }} *</label>
@@ -1139,10 +1187,12 @@ onMounted(() => {
               <option value="">{{ t('resources.chooseKey') }}</option>
               <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
             </select>
+            <p v-if="FH('passthrough_routes', 'anonymous_key')" class="fh">{{ FH('passthrough_routes', 'anonymous_key') }}</p>
           </div>
           <div class="form-row" v-if="form.auth_mode === 'anonymous'">
             <label>{{ FL('passthrough_routes', 'source_cidrs') }} *</label>
             <input v-model="form.source_cidrs" placeholder="10.0.0.0/8, 127.0.0.1/32（逗号分隔）" />
+            <p v-if="FH('passthrough_routes', 'source_cidrs')" class="fh">{{ FH('passthrough_routes', 'source_cidrs') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'credential_mode') }}</label>
@@ -1150,6 +1200,7 @@ onMounted(() => {
               <option value="inject">inject（注入 ProviderKey 密钥）</option>
               <option value="forward_client">forward_client（转发调用方凭证）</option>
             </select>
+            <p v-if="FH('passthrough_routes', 'credential_mode')" class="fh">{{ FH('passthrough_routes', 'credential_mode') }}</p>
           </div>
           <div class="form-row" v-if="form.credential_mode === 'inject'">
             <label>{{ FL('passthrough_routes', 'provider_key') }} *</label>
@@ -1157,22 +1208,27 @@ onMounted(() => {
               <option value="">选择 ProviderKey…</option>
               <option v-for="p in providerKeys" :key="p" :value="p">{{ p }}</option>
             </select>
+            <p v-if="FH('passthrough_routes', 'provider_key')" class="fh">{{ FH('passthrough_routes', 'provider_key') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'identity_header') }}</label>
             <input v-model="form.identity_header" placeholder="x-aisix-user（可选）" />
+            <p v-if="FH('passthrough_routes', 'identity_header')" class="fh">{{ FH('passthrough_routes', 'identity_header') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'forward_client_headers') }}</label>
             <input v-model="form.forward_client_headers" placeholder="x-trace-*（逗号分隔 glob，可选）" />
+            <p v-if="FH('passthrough_routes', 'forward_client_headers')" class="fh">{{ FH('passthrough_routes', 'forward_client_headers') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'timeout_ms') }}</label>
             <input v-model="form.timeout_ms" type="number" />
+            <p v-if="FH('passthrough_routes', 'timeout_ms')" class="fh">{{ FH('passthrough_routes', 'timeout_ms') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('passthrough_routes', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('passthrough_routes', 'enabled')" class="fh">{{ FH('passthrough_routes', 'enabled') }}</p>
           </div>
         </template>
 
@@ -1181,10 +1237,12 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('mcp_auth_settings', 'resource_url') }}</label>
             <input v-model="form.resource_url" placeholder="https://gw.example.com/mcp" />
+            <p v-if="FH('mcp_auth_settings', 'resource_url')" class="fh">{{ FH('mcp_auth_settings', 'resource_url') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('mcp_auth_settings', 'anonymousEnabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.anonymous_enabled" /></label>
+            <p v-if="FH('mcp_auth_settings', 'anonymousEnabled')" class="fh">{{ FH('mcp_auth_settings', 'anonymousEnabled') }}</p>
           </div>
           <template v-if="form.anonymous_enabled">
             <div class="form-row">
@@ -1193,18 +1251,22 @@ onMounted(() => {
                 <option value="">{{ t('resources.chooseKey') }}</option>
                 <option v-for="r in apiKeyIds" :key="r.id" :value="r.identity">{{ r.identity }}</option>
               </select>
+              <p v-if="FH('mcp_auth_settings', 'anonymousApiKeyId')" class="fh">{{ FH('mcp_auth_settings', 'anonymousApiKeyId') }}</p>
             </div>
             <div class="form-row">
               <label>{{ FL('mcp_auth_settings', 'anonymousSourceCidrs') }} *</label>
               <input v-model="form.anonymous_source_cidrs" placeholder="0.0.0.0/0, ::/0（逗号分隔）" />
+              <p v-if="FH('mcp_auth_settings', 'anonymousSourceCidrs')" class="fh">{{ FH('mcp_auth_settings', 'anonymousSourceCidrs') }}</p>
             </div>
             <div class="form-row">
               <label>{{ FL('mcp_auth_settings', 'anonymousServers') }} *</label>
               <input v-model="form.anonymous_servers" placeholder="demo-mcp, another-mcp（逗号分隔）" />
+              <p v-if="FH('mcp_auth_settings', 'anonymousServers')" class="fh">{{ FH('mcp_auth_settings', 'anonymousServers') }}</p>
             </div>
             <div class="form-row">
               <label>{{ FL('mcp_auth_settings', 'anonymousAggregateEntry') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.anonymous_aggregate_entry" /></label>
+              <p v-if="FH('mcp_auth_settings', 'anonymousAggregateEntry')" class="fh">{{ FH('mcp_auth_settings', 'anonymousAggregateEntry') }}</p>
             </div>
           </template>
         </template>
@@ -1214,6 +1276,7 @@ onMounted(() => {
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('claim_mappings', 'name')" class="fh">{{ FH('claim_mappings', 'name') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'jwt_provider') }} *</label>
@@ -1221,10 +1284,12 @@ onMounted(() => {
               <option value="">选择 OIDC 提供方…</option>
               <option v-for="o in lookups.oidc_providers" :key="o" :value="o">{{ o }}</option>
             </select>
+            <p v-if="FH('claim_mappings', 'jwt_provider')" class="fh">{{ FH('claim_mappings', 'jwt_provider') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'priority') }}</label>
             <input v-model="form.priority" type="number" />
+            <p v-if="FH('claim_mappings', 'priority')" class="fh">{{ FH('claim_mappings', 'priority') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'match') }} *</label>
@@ -1246,6 +1311,7 @@ onMounted(() => {
               </div>
               <button @click="form.match.push({ claim: '', op: 'exact', values: [''] })">+ match</button>
             </div>
+            <p v-if="FH('claim_mappings', 'match')" class="fh">{{ FH('claim_mappings', 'match') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'resolveApiKey') }} *</label>
@@ -1253,10 +1319,12 @@ onMounted(() => {
               <option value="">{{ t('resources.chooseKey') }}</option>
               <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
             </select>
+            <p v-if="FH('claim_mappings', 'resolveApiKey')" class="fh">{{ FH('claim_mappings', 'resolveApiKey') }}</p>
           </div>
           <div class="form-row">
             <label>{{ FL('claim_mappings', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('claim_mappings', 'enabled')" class="fh">{{ FH('claim_mappings', 'enabled') }}</p>
           </div>
         </template>
       </template>
@@ -1284,6 +1352,16 @@ onMounted(() => {
    template, so the scoped selector reaches them. */
 .modal .form-row {
   grid-template-columns: 200px 1fr;
+}
+
+/* Field help sits under the input, spanning both columns: a 40-character Chinese
+   sentence would wrap to four lines inside the 200px label column. */
+.modal .form-row > .fh {
+  grid-column: 2;
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 /* Catalogue layout. Kept local to the view: nothing else renders cards. */

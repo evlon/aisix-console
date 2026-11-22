@@ -247,6 +247,41 @@ test('no field copy key contains a dot', () => {
   assert.deepEqual(bad, [], `field keys must not contain a dot: ${bad.join(', ')}`);
 });
 
+test('every field a form renders has one line of help, in both locales', () => {
+  // The design's promise is one line per field: what to put there, and what
+  // breaks if you get it wrong. A field with a label but no help is the halfway
+  // state this whole change exists to remove.
+  const missing = [];
+  for (const [kind, fields] of Object.entries(FORM_FIELDS)) {
+    for (const field of fields) {
+      const keys = [`resourceCatalog.kind.${kind}.fieldHelp.${field}`, `resourceCatalog.fieldHelp.${field}`];
+      for (const [name, loc] of Object.entries(locales)) {
+        if (!keys.some((key) => filled(resolve(loc, key)))) missing.push(`${name}: ${kind}.${field}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `fields with no help:\n${missing.join('\n')}`);
+});
+
+test('no help copy is orphaned', () => {
+  // Shared help must be rendered by some form, and per-kind help must belong to a
+  // field that form actually renders. Dead copy hides a rename on the page side.
+  const problems = [];
+  const rendered = new Set(Object.values(FORM_FIELDS).flat());
+  for (const key of Object.keys(zh.resourceCatalog.fieldHelp ?? {})) {
+    if (!rendered.has(key)) problems.push(`fieldHelp.${key} is rendered by no form`);
+  }
+  for (const [kind, block] of Object.entries(zh.resourceCatalog.kind ?? {})) {
+    for (const key of Object.keys(block?.fieldHelp ?? {})) {
+      if (!FORM_FIELDS[kind]) problems.push(`kind.${kind}.fieldHelp exists but ${kind} has no form`);
+      else if (!FORM_FIELDS[kind].includes(key)) {
+        problems.push(`kind.${kind}.fieldHelp.${key} is not a field that form renders`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
 test('every field an inline form renders has a label in both locales', () => {
   // Label resolution is a fallback chain: the per-kind override, then the shared
   // field.*, then the table-column label col.*. A gap anywhere in the chain is

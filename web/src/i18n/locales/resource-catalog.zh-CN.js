@@ -185,6 +185,61 @@ export default {
       resolveApiKey: '映射到哪把密钥',
     },
 
+    // ── form field help ──
+    // One line per field: what to put there, and what breaks if you get it wrong.
+    // Shared across kinds, with a per-kind override where the meaning differs
+    // (`priority` runs in opposite directions in the two places it appears).
+    // web/test/resourceCatalog.test.js requires every field a form renders to
+    // have one in both locales, and rejects help copy nobody renders.
+    fieldHelp: {
+      name: '内部标识，日志与错误信息里用它定位。它不是给调用方看的名字。',
+      url: '对端地址。必须能被网关容器访问到 —— 不是从你的浏览器。',
+      enabled: '停用后条目保留，但网关不再使用它。排查问题时比删除安全。',
+      timeout_ms: '留空用网关默认值。对端较慢就调大，但别超过调用方的耐心。',
+      forward_client_headers: '把调用方的这些请求头原样带给对端，对端才知道是谁在用。逗号分隔。',
+      secret: '对方给的凭据。它在文件里是明文，管理接口也会原样返回，界面列表不应展示。',
+      transport: '当前只有一个合法值，改它没有意义。',
+      type: '决定下面还要填哪些字段，也决定网关怎么调它。',
+      auth_type: '网关连对端时用什么身份。选 bearer/api_key 就必须填密钥 —— 漏了会让整行在加载时被拒，不会等到运行时才报错。',
+      client_id: 'OAuth2 客户端标识，与下面的取 token 地址、授权范围配套填写。',
+      token_url: '网关用它换取访问令牌的地址。',
+      scopes: '向对方申请的授权范围；token exchange 模式下至少要有一项。',
+      spec: '仅 openapi 类型需要。里面必须至少有一个能变成工具的操作，否则这一行会被网关拒掉。',
+      api_key_header: '密钥放在哪个请求头里发给对方，例如 X-API-Key。仅 api_key 认证时需要。',
+      protocol_version: '必须与上游一致。不符时由上游按协议错误拒掉，网关侧看不到原因。',
+      issuer: '与 JWT 里的签发方逐字节比较，是选中本提供方的唯一依据。结尾斜杠也要一致。',
+      audiences: 'JWT 的受众命中任意一个即可。JWKS 模式下留空会让整行在加载时被丢弃。',
+      jwks_uri: '留空则从签发方的标准发现文档里取。填了共享密钥就不能再填这里。',
+      hmac_secret: '仅对称签名时填，UTF-8 字节数至少 32。填了它就等于改用对称密钥信任，此时不能再有公钥地址。',
+      identity_claim: '先用整个名字当一条声明，找不到再按点号遍历嵌套对象。它决定用哪个值去匹配密钥的 jwt_subject。',
+      required_scopes: '令牌必须包含全部这些 scope，缺一个就 403。',
+      bound_claims: 'JSON 键值对；写了就必须全部匹配，任一不符即拒绝。',
+      leeway_secs: '容忍签发方与网关的时钟偏差，单位秒。',
+      guardrail_id: '要绑定的规则。规则本身在「策略」页维护，这里只做绑定。',
+      scope_type: '选 env 对所有请求生效。一个请求只携带一个维度：挂到模型上的规则不会检查 MCP 或透传流量。',
+      scope_id: '按上一项的选择给出候选，存的是该对象的 id。选 env 时不需要填。',
+      path_prefix: '与「匹配域名」至少给一个。不能占用网关自己的路径（/v1、/mcp、/a2a、/admin、/livez、/readyz、/metrics）。',
+      hosts: '按请求的 Host 头匹配，逗号分隔。给了它才会启用 Host 派发，「保留原 Host」也依赖它。',
+      target_url: '与「保留原 Host」二选一。填这里 = 挂载：前缀会被剥掉再拼到目标上。',
+      preserve_host: '与「转发到」二选一。选是 = 镜像：前缀只用来选中请求，完整路径原样转发；必须同时给匹配域名，否则等于让请求自己决定目标。',
+      auth_mode: '决定网关从哪里取调用方身份。选匿名时必须再指定匿名主体与来源网段，否则等于把这条路由对外开放。',
+      auth_header_name: '网关从哪个请求头取调用方密钥（把 Authorization 留给上游）。不能填 authorization、cookie、x-api-key 这几个。',
+      anonymous_key: '匿名请求以这把密钥的身份运行，因此它的模型白名单、限流、预算都会照用。',
+      source_cidrs: '只有来源 IP 落在这些网段内的请求才被当作匿名主体，逗号分隔。',
+      credential_mode: '注入 = 剥掉入站凭据再换上你选的上游密钥；转发 = 把调用方原始凭据原样转给上游。',
+      provider_key: '网关注入哪把上游密钥（注入模式必填）。这里填的是引用名，不是密钥本身。',
+      identity_header: '把网关识别出的调用方身份写进这个请求头带给后端，后端就不必再解析密钥。',
+      resource_url: 'MCP 的对外地址。它生效还需要至少一个启用的 JWKS 模式 OIDC 提供方，否则发现面仍然休眠。',
+      anonymousEnabled: '允许完全不带凭据的调用方进入。无效或过期的凭据仍会被拒 —— 匿名是「无凭据」通路，不是降级。',
+      anonymousApiKeyId: '匿名请求以这把密钥的身份运行。它必须带有明确的 MCP 授权。',
+      anonymousSourceCidrs: '只有来源 IP 落在这些网段内的无凭据请求才被接受。',
+      anonymousServers: '这是「上限」：列出的服务器还要与该密钥自己的授权取交集。',
+      anonymousAggregateEntry: '聚合入口也接受匿名。开启后无凭据请求会成功，因此不再返回 WWW-Authenticate 提示。',
+      jwt_provider: '必须是「OIDC 提供方」里已存在的名字 —— 拼写不一致时这条映射永远不会被评估。',
+      match: '条件全部成立才算命中。算子要与声明的类型匹配：exact 只认字符串，contains 只认字符串数组。',
+      resolveApiKey: '命中后以这把密钥的权限运行。密钥不存在时请求会 401，而不是 403。',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {
@@ -217,6 +272,11 @@ export default {
       },
       mcp_servers: {
         label: 'MCP 服务器',
+        // The one place where `name` is more than an identifier: it is also the
+        // tool namespace prefix.
+        fieldHelp: {
+          name: '网关内部标识，也是工具命名空间前缀（工具以「服务器名__工具名」暴露）。不能含双下划线，不能以单下划线结尾。',
+        },
         oneLiner: '注册一个工具来源（真的 MCP server，或用 OpenAPI 描述的 REST API），工具以「服务器名__工具名」暴露。',
         whenNeeded: '要让模型调外部工具时配置。只做对话不需要。',
         effect: '/mcp 聚合端点开始提供这些工具；/mcp/<名> 提供单服务器的原始工具名；网关持有的上游凭据不会下发给调用方。',
@@ -231,6 +291,9 @@ export default {
       },
       a2a_agents: {
         label: 'A2A 智能体',
+        fieldHelp: {
+          name: 'URL 路径段（/a2a/<名>），会直接拼进 agent card 的地址，因此不能含 / ? # % 或空白。',
+        },
         oneLiner: '把一个外部智能体挂到 /a2a/<名> 下，凭据由网关保管。',
         whenNeeded: '要让调用方经过网关的认证、ACL、护栏、配额去调外部 agent，而不是绕过网关直连。',
         effect: 'POST /a2a/<名> 与 GET /a2a/<名>/.well-known/agent-card.json 开始服务；card 里的 url 会被改写成网关地址。',
@@ -316,6 +379,9 @@ export default {
       },
       claim_mappings: {
         label: 'Claim 映射',
+        fieldHelp: {
+          priority: '数字越小越先评估 —— 与护栏附件相反。第一条命中的生效，后面都不看。',
+        },
         oneLiner: '按 JWT 里的声明条件，把「一类身份」映射到一把已存在的网关密钥上。',
         whenNeeded: '密钥上一对一的 jwt_subject 绑定不够用时，用映射容纳一整类人。',
         effect: 'token 通过提供方完整校验、且没有密钥直接绑定该 subject 时，按优先级取第一个全部条件命中的映射，用它的目标密钥运行请求。',
@@ -375,6 +441,9 @@ export default {
       },
       guardrail_attachments: {
         label: '护栏附件',
+        fieldHelp: {
+          priority: '必填，没有默认值。同一护栏被多个作用域命中时，数字最大者胜。',
+        },
         oneLiner: '把一条护栏挂到环境、模型、MCP 服务器、密钥、团队或透传路由上，决定这条规则看哪些流量。',
         whenNeeded: '护栏建好之后必配这一步，否则规则不检查任何流量。',
         effect: '被绑定的对象上，请求与响应都按该护栏检查；同一护栏被多个作用域命中时，优先级数字最大者胜。',

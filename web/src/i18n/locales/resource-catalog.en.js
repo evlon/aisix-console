@@ -187,6 +187,56 @@ export default {
       resolveApiKey: 'API key to map onto',
     },
 
+    // ── form field help ── see the note in zh-CN.js
+    fieldHelp: {
+      name: 'Internal identifier, used in logs and error messages. It is not the name callers see.',
+      url: 'The peer address. It must be reachable from the gateway container, not from your browser.',
+      enabled: 'Disabling keeps the row but stops the gateway using it — safer than deleting while you investigate.',
+      timeout_ms: 'Blank uses the gateway default. Raise it for a slow peer, but not past the caller\'s patience.',
+      forward_client_headers: 'Pass these caller headers through unchanged, so the peer can tell who is calling. Comma separated.',
+      secret: 'The credential the peer gave you. It is plaintext in this file and the admin API returns it verbatim, so it should not appear in a list.',
+      transport: 'Only one value is legal today, so changing it does nothing.',
+      type: 'Decides which fields below are needed, and how the gateway talks to the peer.',
+      auth_type: 'The identity the gateway uses towards the peer. Choosing bearer/api_key makes the secret required — omitting it fails the load rather than the request.',
+      client_id: 'OAuth2 client identifier; fill it together with the token URL and scopes below.',
+      token_url: 'Where the gateway exchanges for an access token.',
+      scopes: 'The authorisation scopes to request. Token exchange requires at least one.',
+      spec: 'Only for the openapi type. It must contain at least one operation that can become a tool, or the gateway rejects the row.',
+      api_key_header: 'Which request header carries the key to the peer, e.g. X-API-Key. Only needed for api_key auth.',
+      protocol_version: 'Must match the peer. A mismatch is rejected by the peer as a protocol error, with nothing visible on the gateway side.',
+      issuer: 'Compared byte for byte with the token\'s issuer; it is the only way a provider is selected. A trailing slash matters.',
+      audiences: 'Any one of these may match the token audience. Left empty under JWKS mode the whole row is dropped at load.',
+      jwks_uri: 'Blank means it is read from the issuer\'s discovery document. It cannot be set together with a shared secret.',
+      hmac_secret: 'Only for symmetric signing; at least 32 UTF-8 bytes. Setting it switches to shared-key trust, so the JWKS URI must be absent.',
+      identity_claim: 'Tried first as one whole claim name, then as a dotted path into nested objects. It decides which value is matched against a key\'s jwt_subject.',
+      required_scopes: 'The token must carry all of these scopes; missing one is a 403.',
+      bound_claims: 'JSON key/value pairs. All of them must match; any mismatch is rejected.',
+      leeway_secs: 'Tolerated clock difference between the issuer and the gateway, in seconds.',
+      guardrail_id: 'The rule to attach. The rule itself lives on the Policies page; this only binds it.',
+      scope_type: 'env applies to every request. A request carries one dimension only, so a rule attached to a model never inspects MCP or passthrough traffic.',
+      scope_id: 'Candidates follow the choice above; what is stored is that object\'s id. Not needed for env.',
+      path_prefix: 'Give this or a host to match. It may not occupy the gateway\'s own paths (/v1, /mcp, /a2a, /admin, /livez, /readyz, /metrics).',
+      hosts: 'Matches the request Host header, comma separated. This is what enables Host dispatch, and what preserve-host depends on.',
+      target_url: 'The alternative to preserving the host. Filling it means "mount": the prefix is stripped and re-appended to the target.',
+      preserve_host: 'The alternative to a target URL. Setting it means "mirror": the prefix only selects the request and the full path is forwarded; it requires a host list, or the request itself would choose the destination.',
+      auth_mode: 'Where the gateway takes the caller identity from. Anonymous also requires a subject key and source CIDRs, or the route is simply open.',
+      auth_header_name: 'Which header carries the caller key — leaving Authorization free for the upstream. It cannot be authorization, cookie or x-api-key.',
+      anonymous_key: 'Anonymous requests run as this key, so its model allowlist, rate limits and budgets all apply.',
+      source_cidrs: 'Only requests from these networks are treated as the anonymous subject. Comma separated.',
+      credential_mode: 'inject strips the inbound credential and substitutes the upstream key you pick; forward passes the caller\'s own credential through.',
+      provider_key: 'Which upstream key to inject (required in inject mode). This is a reference name, not the key itself.',
+      identity_header: 'Writes the identity the gateway resolved into this header, so the backend need not parse the key.',
+      resource_url: 'The MCP address as seen from outside. It only takes effect with at least one enabled JWKS-mode OIDC provider; otherwise discovery stays dormant.',
+      anonymousEnabled: 'Admits callers with no credential at all. Invalid or expired credentials are still rejected — anonymous is a credential-less path, not a downgrade.',
+      anonymousApiKeyId: 'Anonymous requests run as this key. It must carry an explicit MCP grant.',
+      anonymousSourceCidrs: 'Only credential-less requests from these networks are accepted.',
+      anonymousServers: 'This is an upper bound: the servers listed are intersected with the key\'s own grants.',
+      anonymousAggregateEntry: 'The aggregate entry accepts anonymous too. Credential-less requests then succeed, so the WWW-Authenticate challenge is no longer returned.',
+      jwt_provider: 'Must be a name that exists under OIDC providers — a spelling mismatch means this mapping is never evaluated.',
+      match: 'All conditions must hold. The operator has to match the claim\'s type: exact only accepts strings, contains only string arrays.',
+      resolveApiKey: 'Requests run with this key\'s permissions. A missing key answers 401, not 403.',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {
@@ -219,6 +269,11 @@ export default {
       },
       mcp_servers: {
         label: 'MCP servers',
+        // The one place where `name` is more than an identifier: it is also the
+        // tool namespace prefix.
+        fieldHelp: {
+          name: 'Internal identifier, and the tool namespace prefix (tools are exposed as "server__tool"). It may not contain a double underscore or end with one.',
+        },
         oneLiner: 'Register a source of tools (a real MCP server, or a REST API described with OpenAPI); tools are exposed as "server_name__tool_name".',
         whenNeeded: 'Configure this when models should call external tools. Plain chat does not need it.',
         effect: 'The /mcp aggregate endpoint starts offering these tools; /mcp/<name> offers one server\'s raw tool names; upstream credentials held by the gateway are never handed down to the caller.',
@@ -233,6 +288,9 @@ export default {
       },
       a2a_agents: {
         label: 'A2A agents',
+        fieldHelp: {
+          name: 'A URL path segment (/a2a/<name>) that is spliced into the agent card address, so it may not contain / ? # % or whitespace.',
+        },
         oneLiner: 'Mount an external agent under /a2a/<name>, with the gateway holding the credentials.',
         whenNeeded: 'Callers should reach an external agent through the gateway\'s auth, ACL, guardrails and quotas instead of connecting around it.',
         effect: 'POST /a2a/<name> and GET /a2a/<name>/.well-known/agent-card.json start serving; the url in the card is rewritten to the gateway address.',
@@ -318,6 +376,9 @@ export default {
       },
       claim_mappings: {
         label: 'Claim mappings',
+        fieldHelp: {
+          priority: 'Lower numbers are evaluated first — the opposite of guardrail attachments. The first match wins and the rest are not considered.',
+        },
         oneLiner: 'Map "a class of identities" onto an existing gateway key based on conditions on JWT claims.',
         whenNeeded: 'When one-to-one jwt_subject binding on the key is not enough, use a mapping to cover a whole class of people.',
         effect: 'When a token passes full provider validation and no key binds that subject directly, the first mapping whose conditions all match by priority is taken, and the request runs with its target key.',
@@ -377,6 +438,9 @@ export default {
       },
       guardrail_attachments: {
         label: 'Guardrail attachments',
+        fieldHelp: {
+          priority: 'Required, with no default. When several scopes match one guardrail, the highest number wins.',
+        },
         oneLiner: 'Attach a guardrail to an environment, model, MCP server, key, team or passthrough route, which decides what traffic the rule sees.',
         whenNeeded: 'This step is mandatory once a guardrail exists; otherwise the rule checks no traffic.',
         effect: 'On the bound objects, both requests and responses are checked by that guardrail; when the same guardrail is hit by several scopes, the highest priority number wins.',
