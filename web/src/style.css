@@ -261,6 +261,41 @@ button.danger:hover {
   grid-template-columns: 1fr;
 }
 
+/* Two fields side by side, for pairs that are really one decision (a purpose and
+   its configuration name, two timeouts in the same unit, two checkboxes). The
+   label column is narrowed because half the row is gone.
+   Measured: this is layout, not compression — the point is that paired fields
+   read as one answer. Where the width makes a hint wrap it saves nothing, so
+   pair a field only after looking at what it renders at half width. */
+.form-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+
+.form-pair > .form-row {
+  grid-template-columns: 110px 1fr;
+  /* Without min-width:0 the tracks are sized by content, and a <select> is as wide
+     as its longest option — which made a purpose/shape pair render 617px against
+     311px instead of two equal halves. */
+  min-width: 0;
+}
+
+.form-pair > .form-row > select,
+.form-pair > .form-row > input {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .form-pair {
+    grid-template-columns: 1fr;
+  }
+  .form-pair > .form-row {
+    grid-template-columns: 160px 1fr;
+  }
+}
+
 .muted {
   color: var(--muted);
 }

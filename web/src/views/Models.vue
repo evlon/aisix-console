@@ -578,24 +578,26 @@ onMounted(load);
         <!-- Asked first, in the user's terms. The shape below is the same choice
              named the way the configuration names it, kept visible so nobody has
              to open the raw YAML to find out what this model actually is. -->
-        <div class="form-row">
-          <label>{{ t('models.purpose') }}</label>
-          <select
-            v-model="form.purpose"
-            @change="chooseShape((PURPOSES.find((p) => p.key === form.purpose) || {}).shape || 'direct')"
-          >
-            <option v-for="p in PURPOSES" :key="p.key" :value="p.key">{{ t('models.' + purposeKeys[p.key]) }}</option>
-          </select>
-          <p class="fh">{{ t('models.purposeHint') }}</p>
-        </div>
-        <div class="form-row">
-          <label>{{ t('models.shape') }}</label>
-          <select
-            v-model="form.shape"
-            @change="form.purpose = form.shape === 'direct' && (form.direct.embedding_text || '').trim() ? 'embedding' : form.shape; chooseShape(form.shape)"
-          >
-            <option v-for="(k, val) in shapeKeys" :key="val" :value="val">{{ t('models.' + k) }}</option>
-          </select>
+        <div class="form-pair">
+          <div class="form-row">
+            <label>{{ t('models.purpose') }}</label>
+            <select
+              v-model="form.purpose"
+              @change="chooseShape((PURPOSES.find((p) => p.key === form.purpose) || {}).shape || 'direct')"
+            >
+              <option v-for="p in PURPOSES" :key="p.key" :value="p.key">{{ t('models.' + purposeKeys[p.key]) }}</option>
+            </select>
+            <p class="fh">{{ t('models.purposeHint') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ t('models.shape') }}</label>
+            <select
+              v-model="form.shape"
+              @change="form.purpose = form.shape === 'direct' && (form.direct.embedding_text || '').trim() ? 'embedding' : form.shape; chooseShape(form.shape)"
+            >
+              <option v-for="(k, val) in shapeKeys" :key="val" :value="val">{{ t('models.' + k) }}</option>
+            </select>
+          </div>
         </div>
 
         <!-- direct -->
@@ -632,13 +634,15 @@ onMounted(load);
               <option v-for="p in providerKeys" :key="p.display_name" :value="p.display_name">{{ p.display_name }}</option>
             </select>
           </div>
-          <div class="form-row">
-            <label>{{ t('models.autoPromptCache') }}</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.direct.auto_prompt_caching" /> {{ t('models.autoPromptCacheHint') }}</label>
-          </div>
-          <div class="form-row">
-            <label>{{ t('models.cooldown') }}</label>
-            <label style="justify-self: start"><input type="checkbox" v-model="form.common.cooldown" /> {{ t('models.cooldownHint') }}</label>
+          <div class="form-pair">
+            <div class="form-row">
+              <label>{{ t('models.autoPromptCache') }}</label>
+              <label style="justify-self: start"><input type="checkbox" v-model="form.direct.auto_prompt_caching" /> {{ t('models.autoPromptCacheHint') }}</label>
+            </div>
+            <div class="form-row">
+              <label>{{ t('models.cooldown') }}</label>
+              <label style="justify-self: start"><input type="checkbox" v-model="form.common.cooldown" /> {{ t('models.cooldownHint') }}</label>
+            </div>
           </div>
           <details style="margin-top: 10px">
             <summary>{{ t('models.advanced') }}</summary>
@@ -780,29 +784,31 @@ onMounted(load);
         </template>
 
         <hr style="border-color: var(--border); margin: 14px 0" />
-        <div class="form-row">
-          <label>{{ t('models.timeoutMs') }}</label>
-          <div style="display: flex; gap: 6px; align-items: center">
+        <div class="form-pair">
+          <div class="form-row">
+            <label>{{ t('models.timeoutMs') }}</label>
+            <div style="display: flex; gap: 6px; align-items: center">
+              <input
+                v-model="form.common.timeout"
+                type="number"
+                :placeholder="String(recTimeouts.timeout)"
+                style="flex: 1"
+                @input="touchedTimeouts = true"
+              />
+              <button class="ghost" style="white-space: nowrap" @click="fillRecommendedTimeouts">
+                {{ t('models.useRecommended') }}
+              </button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>{{ t('models.streamTimeoutMs') }}</label>
             <input
-              v-model="form.common.timeout"
+              v-model="form.common.stream_timeout"
               type="number"
-              :placeholder="String(recTimeouts.timeout)"
-              style="flex: 1"
+              :placeholder="String(recTimeouts.stream)"
               @input="touchedTimeouts = true"
             />
-            <button class="ghost" style="white-space: nowrap" @click="fillRecommendedTimeouts">
-              {{ t('models.useRecommended') }}
-            </button>
           </div>
-        </div>
-        <div class="form-row">
-          <label>{{ t('models.streamTimeoutMs') }}</label>
-          <input
-            v-model="form.common.stream_timeout"
-            type="number"
-            :placeholder="String(recTimeouts.stream)"
-            @input="touchedTimeouts = true"
-          />
         </div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px">
           {{ t('models.timeoutHint', { rec: recTimeouts.timeout, stream: recTimeouts.stream }) }}
