@@ -143,6 +143,7 @@ async function opencli(args) {
 }
 
 const failures = [];
+const skips = [];
 console.log(`render smoke: ${routes.length} routes against ${base} (session "${session}")`);
 
 // One band judgement, used by routes and detail pages alike. The hole this closes:
@@ -219,7 +220,24 @@ for (const kind of DETAIL_KINDS) {
     ]),
   );
   if (!click.ok) {
-    console.log(`  FAIL ${kind.padEnd(22)} no card with data-kind="${kind}" on /resources`);
+    // Distinguish "this build predates the selector" from "the card is gone".
+    // A frozen image (v0.2.3 and earlier) has no data-kind at all, and reporting
+    // that as FAIL turns a version mismatch into an apparent regression — someone
+    // did exactly that and correctly refused to score the result either way.
+    const anyHook = JSON.parse(
+      await opencli([
+        'browser', 'eval',
+        `JSON.stringify({ hooked: document.querySelectorAll('main .rcard[data-kind]').length, cards: document.querySelectorAll('main .rcard').length })`,
+        '--session', session,
+      ]),
+    );
+    if (anyHook.cards > 0 && anyHook.hooked === 0) {
+      console.log(`  SKIP ${kind.padEnd(22)} this build has no data-kind on its cards (image predates the selector)`);
+      console.log('       not a failure: check the detail pages against a build that has it');
+      skips.push(kind);
+      continue;
+    }
+    console.log(`  FAIL ${kind.padEnd(22)} no card with data-kind="${kind}" (other cards do have it) on /resources`);
     failures.push({ route: `/resources -> ${kind}`, h1: '', len: 0, why: 'card not found' });
     continue;
   }
@@ -248,6 +266,12 @@ if (failures.length) {
   console.error('browser console — note that wrap console.error from inside the page if the');
   console.error('error happened during load, because it fires before any DevTools opens.');
   process.exit(1);
+}
+
+if (skips.length) {
+  console.log(`\n${skips.length} detail page(s) SKIPPED, not failed: ${skips.join(', ')}`);
+  console.log('The build under test predates the data-kind selector on the cards.');
+  console.log('Do not read this as a pass for those pages — they are unverified here.');
 }
 
 console.log('\nevery route and detail page rendered content');
