@@ -438,3 +438,19 @@ stable（跟随 `api7/aisix` 最新 release → `:latest` / `:v*`）或 edge（`
 
 日志：网关与控制台都写 stdout，用 `docker logs aisix` 看（其中 `[entrypoint]` 前缀的行来自
 supervisor）。
+
+## 回滚：钉 digest，不要钉滑动 tag
+
+镜像有两类 tag，用途完全不同：
+
+| | 例子 | 会变吗 |
+|---|---|---|
+| **版本 tag** | `:v0.2.2` | **不会**。发布产物的参照，回滚、复验、对账都用它 |
+| **滑动 tag** | `:latest`、`:aisix-1.11.0` | **每次推 `main`（及夜间任务）都会重建**。它表示「用某版网关构建的最新控制台」，**不是**某个冻结版本 |
+
+所以：**回滚要把镜像 id / digest 钉成自己的名字**（例如 `aisix-console:rollback-2026-11-22`），而不是「切回 `:aisix-1.11.0`」。后者在你升级那天可能已经指向新代码了，而这件事**不会报错**——你以为在回滚，实际上没有。
+
+```sh
+docker tag <旧镜像 id> aisix-console:rollback-<日期>
+docker image inspect aisix-console:rollback-<日期> --format '{{.Id}}'
+```

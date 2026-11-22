@@ -515,3 +515,22 @@ Logs: the gateway and the console both write to stdout — use `docker logs aisi
 appended the gateway to `/var/log/aisix-gateway.log` inside the container's
 writable layer with no rotation, which could fill it and leave the console unable
 to start even after a restart; stdout lets the docker log driver rotate instead.
+
+## Rolling back: pin a digest, never a moving tag
+
+Images carry two kinds of tag, and they mean different things:
+
+| | Example | Does it move? |
+|---|---|---|
+| **version tag** | `:v0.2.2` | **No.** The reference for a release: roll back to it, re-verify against it, account with it |
+| **moving tag** | `:latest`, `:aisix-1.11.0` | **Rebuilt on every push to `main`** (and nightly). It means "the newest console built against this gateway", not a frozen version |
+
+So **pin the image id / digest under your own name** (e.g.
+`aisix-console:rollback-2026-11-22`) instead of "switch back to `:aisix-1.11.0`".
+The latter may already point at the new code on the day you need it, and **nothing
+reports it** — you believe you rolled back and did not.
+
+```sh
+docker tag <old image id> aisix-console:rollback-<date>
+docker image inspect aisix-console:rollback-<date> --format '{{.Id}}'
+```

@@ -53,6 +53,15 @@ if (!routes.length) {
 // threshold: a healthy view has text beyond its own heading. A blank view keeps
 // exactly the h1 and nothing else.
 const PROBE = `(() => {
+  // A logged-out console renders the login card, which would look healthy route
+  // by route and turn this whole check into a rubber stamp — the exact failure
+  // mode it exists to prevent. The sidebar only exists inside the app.
+  if (!document.querySelector('aside a[href="/resources"]')) {
+    return JSON.stringify({
+      ok: false,
+      why: 'not logged in: no sidebar, so every route shows the login page. Log in once in this browser session, then run again.',
+    });
+  }
   const main = document.querySelector('main');
   if (!main) return JSON.stringify({ ok: false, why: 'no <main> element' });
   const h1 = (main.querySelector('h1')?.textContent ?? '').trim();
