@@ -72,9 +72,22 @@ const PROBE = `(() => {
     h1,
     len: text.length,
     views,
+    bandRows: main.querySelectorAll('dl.facts .row').length,
+    hasToggle: !!main.querySelector('dl.facts .facts-toggle'),
     head: main.innerHTML.replace(/data-v-[a-z0-9]+=""/g, '').replace(/\\s+/g, ' ').slice(0, 160),
   });
 })()`;
+
+// Expand the band and count what appeared. Kept as its own eval because a promise
+// must never be returned from `opencli eval` — CDP waits for the value and times
+// out (a colleague hit exactly this; see the note at the bottom of this file).
+const EXPAND = `(() => {
+  const b = document.querySelector('main dl.facts .facts-toggle');
+  if (!b) return JSON.stringify({ clicked: false });
+  b.click();
+  return JSON.stringify({ clicked: true });
+})()`;
+const BAND_ROWS = `document.querySelectorAll('main dl.facts .row').length`;
 
 // The probe travels base64-encoded: on Windows `opencli` is a .cmd, so Node runs
 // it through a shell that joins arguments without quoting, and raw JS full of
@@ -119,8 +132,34 @@ for (const route of routes) {
   await new Promise((r) => setTimeout(r, settle));
   const raw = await opencli(['browser', 'eval', `(0,eval)(atob('${b64}'))`, '--session', session]);
   const result = JSON.parse(raw);
+
+  // The explanation band is collapsed by default (that is what won the space
+  // back). "Collapsed" must therefore be verified as collapsed-then-expandable,
+  // not mistaken for missing: a colleague asked for exactly this and could only
+  // report "six questions found: 0, expansion not verified".
+  let bandNote = '';
+  if (result.ok && result.bandRows === 1 && result.hasToggle) {
+    await opencli(['browser', 'eval', EXPAND, '--session', session]);
+    await new Promise((r) => setTimeout(r, 400));
+    const rows = Number(await opencli(['browser', 'eval', BAND_ROWS, '--session', session]));
+    bandNote = ` band 1->${rows}`;
+    // Put it back before the next route: the expanded state is remembered per
+    // origin, so leaving it set makes the following page start expanded and skip
+    // its own collapse->expand check.
+    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
+    if (rows <= 1) {
+      result.ok = false;
+      result.why = `the expand toggle did not reveal the rest: band stayed at ${rows} row(s) after clicking it`;
+    }
+  } else if (result.bandRows > 1) {
+    // Remembered as expanded from an earlier run — reset so the default state is
+    // what the next run sees.
+    await opencli(['browser', 'eval', `localStorage.removeItem('resourceFactsExpanded'); 1`, '--session', session]);
+    bandNote = ` band ${result.bandRows} (left over expanded, reset)`;
+  }
+
   const verdict = result.ok ? 'ok  ' : 'FAIL';
-  console.log(`  ${verdict} ${route.padEnd(16)} h1="${result.h1}" text=${result.len} views=${result.views}`);
+  console.log(`  ${verdict} ${route.padEnd(16)} h1="${result.h1}" text=${result.len} views=${result.views}${bandNote}`);
   if (!result.ok) failures.push({ route, ...result });
 }
 
