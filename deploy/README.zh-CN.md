@@ -190,6 +190,52 @@ aisix ≥ 1.11 要求 `_format_version: "2"` 且**每行都带 UUID `id`**；见
    （欢迎贡献：entrypoint 里加一个 `CONSOLE_ONLY=1` 开关，或一个 console-only 构建目标，
    就能变成一行的事。）
 
+3. **四项路径必须重定向到挂载目录，否则有四类完全不同的症状。** 这几个默认值都由
+   `server/src/config.js:12-16` 从 `PROJECT_ROOT` 拼出来，落在**镜像内部**（`/app/...`），
+   而挂载目录是 `/etc/aisix`。单容器形态下 `deploy/aisix-console.yaml` 本来就把它们指过去了；
+   拆分部署若沿用默认值就会踩到：
+
+   | 配置项 | 默认（镜像内） | 不设的后果 | 报错是否指向真因 |
+   |---|---|---|---|
+   | `resourcesFile` | `/app/resources.yaml` | 控制台读写的是镜像里那份，网关永远看不到你的改动 | 否 |
+   | `secretsFile` | `/app/secrets.env` | **保存配置 409**，报「environment variable `X` is unset or empty」 | **否 —— 方向完全错** |
+   | `authFile` | `/app/auth.json` | 重建容器后登录密码与会话密钥重置回默认 | 否 |
+   | `metricsDb` | 镜像可写层 | 重建容器丢掉全部用量历史 | 否 |
+
+   `secretsFile` 这一条最难自己查出来，因为它的报错会把人送去**错的地方**：保存链路会跑
+   `aisix validate` 校验临时文件，而那个子进程的 env 是**控制台进程 env ∪ `secretsFile` 里的键值**
+   （`server/src/validate.js:15` 的 `env: { ...process.env, ...extraEnv }`，调用点在
+   `server/src/savePipeline.js:74`）。
+
+   于是：单容器形态能用，**不是因为 `secretsFile` 设对了，而是因为 `process.env` 兜住了** ——
+   网关的变量就在同一个容器的环境里。拆分部署里控制台容器没有那些变量，`secretsFile` 就成了
+   唯一通道。默认值指向 `/app/secrets.env`、而你把密钥写在 `/etc/aisix/secrets.env`，
+   校验子进程就看不到它，于是报出「`VLLM_API_KEY` 未设置」—— **而它在网关容器里是好的**，
+   第一反应会去查网关，方向完全错。
+
+   修法（写进控制台的 `aisix-console.yaml`）：
+
+   ```yaml
+   secretsFile: "/etc/aisix/secrets.env"
+   ```
+
+   再在挂载目录放 `VLLM_API_KEY=<值>`（`chmod 600`），或者直接在控制台的「密钥」页里添加 ——
+   它写的就是这个文件。等价做法是把变量放进**控制台容器**的 `environment:` / `env_file:`，
+   子进程会继承它；但那等于把网关的密钥再抄一份到控制台容器，不如用 `secretsFile`。
+
+## 保存会重写整个文件：注释会丢，且同一份文件只应有一个写入者
+
+控制台保存时把整份文档重新序列化（`server/src/resources.js` 的 `serialize()`），因此：
+
+- 你自己写在 `resources.yaml` 里的**注释不会被保留**，缩进与引号风格也会被重排。
+- **语义原样保留**：`_format_version`、每行的 `id`、`${VAR}` 占位符、`key_hash` 都不会被改动。
+
+所以如果同一份文件既有**生成脚本**在写、控制台也在写，两者会互相覆盖：控制台保存清掉脚本写的
+注释；脚本一跑，又把你在控制台里做的编辑整个盖掉。
+
+**约定：`resources.yaml` 同一时间只应有一个写入者。** 用脚本批量生成的话，脚本跑完就让控制台
+接管；要重新用脚本生成，先把控制台里做过的改动备份出来。
+
 ## `config.yaml` 不插值 `${VAR}`
 
 只有**资源文件**会走 `${VAR}` 插值 —— 实现在文件通道（`aisix-etcd/src/file_source/yaml.rs`），

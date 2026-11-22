@@ -212,6 +212,66 @@ for a process named `aisix`. Two consequences when the gateway runs elsewhere
    (Contributions welcome: a `CONSOLE_ONLY=1` switch in the entrypoint, or a
    console-only image target, would make this a one-line change.)
 
+3. **Four paths must be redirected to the mounted directory, or you get four
+   different symptoms.** Their defaults are built from `PROJECT_ROOT` in
+   `server/src/config.js:12-16`, so they land **inside the image** (`/app/...`),
+   while the mounted directory is `/etc/aisix`. `deploy/aisix-console.yaml`
+   already points them at the mount, so the single-container form is fine; a
+   split deployment that keeps the defaults is not:
+
+   | Setting | Default (in image) | Symptom if unset | Does the error point at the cause? |
+   |---|---|---|---|
+   | `resourcesFile` | `/app/resources.yaml` | the console edits the image's copy; the gateway never sees your change | no |
+   | `secretsFile` | `/app/secrets.env` | **saving returns 409**, reporting "environment variable `X` is unset or empty" | **no — it points the wrong way** |
+   | `authFile` | `/app/auth.json` | login password and session key reset to defaults on recreate | no |
+   | `metricsDb` | image writable layer | all usage history lost on recreate | no |
+
+   `secretsFile` is the hardest one to work out alone, because its error sends
+   you to the **wrong place**. Saving runs `aisix validate` against a temp file,
+   and that child's env is **the console process env ∪ the keys in `secretsFile`**
+   (`env: { ...process.env, ...extraEnv }` in `server/src/validate.js:15`, called
+   from `server/src/savePipeline.js:74`).
+
+   So the single-container form works **not because `secretsFile` is set
+   correctly but because `process.env` covers for it** — the gateway's variables
+   live in the same container's environment. In a split deployment the console
+   container does not have them, and `secretsFile` becomes the only channel. With
+   the default pointing at `/app/secrets.env` while you wrote the secret to
+   `/etc/aisix/secrets.env`, the validate child never sees it and reports
+   "`VLLM_API_KEY` is unset" — **while that variable is perfectly fine in the
+   gateway container.** Your first instinct will be to check the gateway, which
+   is the wrong direction.
+
+   The fix, in the console's `aisix-console.yaml`:
+
+   ```yaml
+   secretsFile: "/etc/aisix/secrets.env"
+   ```
+
+   Then put `VLLM_API_KEY=<value>` in the mounted directory (`chmod 600`), or add
+   it from the console's own "Secrets" page — that page writes this very file. An
+   equivalent option is to put the variables in the **console container's**
+   `environment:` / `env_file:`, which the child inherits; but that copies the
+   gateway's secrets into the console container, so `secretsFile` is better.
+
+## Saving rewrites the whole file: comments are lost, and one writer only
+
+A console save re-serialises the entire document (`serialize()` in
+`server/src/resources.js`), so:
+
+- **Comments you wrote in `resources.yaml` are not preserved**, and indentation
+  and quoting style get normalised.
+- **The semantics are preserved**: `_format_version`, each row's `id`, `${VAR}`
+  placeholders and `key_hash` all survive unchanged.
+
+Therefore, if a **generator script** and the console both write this file, they
+overwrite each other: a console save drops the script's comments, and the next
+script run wipes whatever you edited in the console.
+
+**Convention: `resources.yaml` should have exactly one writer at a time.** If you
+generate it with a script, let the console take over once the script has run; if
+you need to regenerate, back up the console-side edits first.
+
 ## `config.yaml` does not interpolate `${VAR}`
 
 Only the **resources file** goes through `${VAR}` interpolation — that lives in

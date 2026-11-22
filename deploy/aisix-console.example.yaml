@@ -1,6 +1,10 @@
 # AISIX Console 配置示例（单容器部署，挂载到 /etc/aisix/aisix-console.yaml）。
 # 由 install.sh 抓取并落盘为 aisix-console.yaml；已提交，不含密钥。
 #
+# ⚠ 这份示例是**单容器**形态（网关与控制台同容器）。若网关跑在别的容器里，
+#   下面四项路径与 reloadCommand 都必须改，否则会出现「能看、一存就 409」这类
+#   报错方向完全错的故障 —— 见 README 的「拆分部署」一节。
+#
 # 控制台与网关同处一个容器，保存配置后通过 gw-hup.sh 给网关发 SIGHUP 热重载，
 # 无需手动重启或重建容器。
 
