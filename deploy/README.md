@@ -13,20 +13,22 @@ for new provider keys (they are written as plaintext into `resources.yaml`).
 The gateway binary is built by CI with a **two-track** strategy (see
 `.github/workflows/build-image.yml`):
 
-- **stable** — tracks the **newest `api7/aisix` release**: the build fetches
-  `releases/latest` via the GitHub API, and falls back to
-  `AISIX_STABLE_FALLBACK` (currently `v0.9.0`) when that call fails or is
-  rate-limited. Published as `:latest` (and `:v*` on tag pushes).
+- **stable** — built from `api7/aisix` at a **pinned ref**
+  (`AISIX_STABLE_REF`, currently `v1.11.0`) — deliberately **not**
+  `releases/latest`. Published as `:latest` (and `:v*` on tag pushes).
 - **edge** — built from `api7/aisix` `main` (newest features), published as
   `:edge`. Refreshed nightly and on `workflow_dispatch` (`track=edge`).
 
-> ⚠️ **The stable track follows releases, so it moves on its own.** Upstream's
-> release workflow creates **drafts** (`gh release create … --draft`), and
-> `releases/latest` ignores drafts — so a build can pick up an older gateway than
-> you expect. Measured 2026-11: `:latest` resolved to `aisix-1.10.0` because
-> `v1.11.0`'s release was still a draft. That matters hard for a
-> `_format_version: "2"` file, which **only a gateway ≥ 1.11 can read**. To pin,
-> use a concrete tag (`aisix-1.11.0`), not `:latest`.
+> ⚠️ **Why stable is pinned rather than tracking the newest release.** The
+> console writes and validates `_format_version: "2"`, which only a gateway
+> ≥ 1.11 can read — so "newest release" can bundle an `aisix` that rejects the
+> console's own files. That is not hypothetical: while `v1.11.0`'s GitHub
+> release was still a **draft**, `releases/latest` resolved to **1.10.0**.
+> Pinning also makes a build reproducible. Bump `AISIX_STABLE_REF` when you want
+> a newer gateway; the schema gate below still fails the build if the pinned
+> gateway rejects the console's CI sample, and it *did* catch the reverse
+> mismatch (gateway moved to 1.11 while the sample was still v1).
+> Override per run with the `aisix_ref` input.
 
 Every image carries an `aisix.version` OCI label recording the gateway build
 (`docker inspect --format '{{.Config.Labels}}' <image>`).
@@ -157,6 +159,12 @@ the main README's 「resources.yaml 的文件格式」 section. Migrate **before
 pointing a v1 file at a 1.11+ gateway — a mismatch fails the whole load, not one
 row. The console shows a banner with a one-click migration, and
 `node server/scripts/migrate-resources-v2.mjs` does the same thing offline.
+
+**The shipped scaffold is v2.** `deploy/resources.template.yaml` (seeded into a
+fresh data dir by `run.sh`) declares `_format_version: "2"`, and so does the
+console's own "create empty template". An empty v2 document is valid — the
+per-row `id` rule only binds rows. On a gateway **older** than 1.11 you must
+change that one line to `"1"`, or the gateway will not start at all.
 
 ## Running the console without the gateway (split deployment)
 

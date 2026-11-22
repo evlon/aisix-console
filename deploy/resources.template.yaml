@@ -1,4 +1,4 @@
-_format_version: "1"
+_format_version: "2"
 provider_keys: []
 models: []
 api_keys: []
@@ -13,3 +13,10 @@ oidc_providers: []
 claim_mappings: []
 passthrough_routes: []
 mcp_auth_settings: []
+teams: []
+users: []
+pricing: []
+budgets: []
+budget_policy: []
+usage_accounting: []
+mcp_policies: []

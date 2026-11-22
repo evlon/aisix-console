@@ -8,17 +8,19 @@
 # NOTE: do NOT seed this into a live data dir; `run.sh` uses
 # `resources.template.yaml` (all-empty scaffold) for that.
 
-_format_version: "1"
 
+_format_version: "2"
 provider_keys:
-  - display_name: openai-prod
+  - id: 6dd1461f-b67e-514b-89fd-6700995f1b7c
+    display_name: openai-prod
     provider: openai
     api_base: https://api.openai.com/v1
     api_key: sk-example-openai
     telemetry_tags:
       kind: byo
       byo_label: openai-prod
-  - display_name: deepseek
+  - id: 07e1ef9f-410f-5271-b7f0-f3901e83118c
+    display_name: deepseek
     provider: openai
     api_base: https://api.deepseek.com
     adapter: openai
@@ -26,88 +28,86 @@ provider_keys:
     request:
       param_renames:
         max_tokens: max_completion_tokens
-
 models:
-  - display_name: gpt-4o
+  - id: 6efd592d-a73b-573d-8e2c-e9e103692f92
+    display_name: gpt-4o
     provider: openai
     model_name: gpt-4o-2024-11-20
-    provider_key: openai-prod
     timeout: 25000
-  # Routing-only (composed) model — references the other models by name.
-  # A routing model carries only `routing`; timeout/cooldown live on direct
-  # models (see `gpt-4o` above).
-  - display_name: deepseek-chat
+    provider_key_id: 6dd1461f-b67e-514b-89fd-6700995f1b7c
+  - id: e54a4165-1636-5144-96ff-abe7196af1d4
+    display_name: deepseek-chat
     routing:
       strategy: failover
       targets:
         - model: gpt-4o
       when_all_unavailable: fail
-
 api_keys:
-  - display_name: local-dev
+  - id: c3d40447-fe54-59c6-ad4e-e92df5d3959e
+    display_name: local-dev
     allowed_models:
       - "*"
     key_hash: 91ed2dbc407561556f3e7be98ba0bd2a57986d6a868c482d867d19c6d40d201c
     mcp_access:
       allow:
-        - "demo-mcp__*"
+        - demo-mcp__*
     mcp_rate_limits:
       demo-mcp:
         rpm: 60
-  - display_name: anon-principal
+  - id: 9aeb246c-ed38-5bef-a854-c8565ca95fb4
+    display_name: anon-principal
     allowed_models: []
     key_hash: 5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a
-
 guardrails:
-  - name: global-keyword
+  - id: 79dfe557-29dd-53b8-9957-0ba76990bde6
+    name: global-keyword
     kind: keyword
     patterns:
       - kind: literal
         value: blocked-phrase
-
 guardrail_attachments:
-  - guardrail_id: global-keyword
+  - id: fc7b60cd-4c7d-51e7-9e8b-43c5a7b35b83
     scope_type: model
-    scope_id: gpt-4o
     priority: 10
-
+    guardrail_id: 79dfe557-29dd-53b8-9957-0ba76990bde6
+    scope_id: 6efd592d-a73b-573d-8e2c-e9e103692f92
 mcp_servers:
-  - name: demo-mcp
+  - id: 65f26cfc-77d2-5c45-91e4-fee5dbe870ff
+    name: demo-mcp
     type: mcp
     url: https://example.com/mcp
-
 a2a_agents:
-  - name: demo-agent
+  - id: de0e4d59-a956-5dd4-b6b5-8bc76cdc9a20
+    name: demo-agent
     url: https://agents.example.com/a2a
-
 cache_policies:
-  # Reference an existing model by its file name (alias).
-  - name: cache-gpt4o
+  - id: c29b8355-1217-534c-85fd-709e67a364fd
+    name: cache-gpt4o
     applies_to: model:gpt-4o
-
 observability_exporters:
-  - name: demo-otlp
+  - id: 44363cee-09c2-5094-9328-e738811b8e5e
+    name: demo-otlp
     enabled: true
     kind: otlp_http
     endpoint: https://api.honeycomb.io/v1/traces
     headers:
       x-honeycomb-team: example-token
-
 rate_limit_policies:
-  - name: rl-gpt4o
+  - id: 50d06a1d-a8b2-508f-92b5-9280e7cda341
+    name: rl-gpt4o
     scope: model
     scope_ref: gpt-4o
     window: minute
     max_requests: 10
-
 oidc_providers:
-  - name: corp
+  - id: 6fcef35b-74ef-54f9-a084-42c447afd31b
+    name: corp
     issuer: https://sso.example.com/realms/agents
     audiences:
       - aisix
-
 claim_mappings:
-  - name: finance-dept
+  - id: b0926ca5-9240-5d00-99ce-251b456cf703
+    name: finance-dept
     jwt_provider: corp
     match:
       - claim: department
@@ -115,25 +115,30 @@ claim_mappings:
         values:
           - finance
     resolve:
-      api_key: local-dev
-
+      api_key_id: c3d40447-fe54-59c6-ad4e-e92df5d3959e
 passthrough_routes:
-  - name: internal-echo
+  - id: d9dd8f3e-bc68-59b7-81c0-cb50b75afb34
+    name: internal-echo
     path_prefix: /internal/echo
     target_url: https://httpbin.org
-    provider_key: openai-prod
-  - name: header-key-route
-    hosts: ["api.example.com"]
+    provider_key_id: 6dd1461f-b67e-514b-89fd-6700995f1b7c
+  - id: d061ae35-c9df-57d2-9166-f28b160dea74
+    name: header-key-route
+    hosts:
+      - api.example.com
     preserve_host: true
     auth_mode: header_key
     auth_header_name: x-aisix-api-key
     credential_mode: forward_client
-  - name: anon-route
+  - id: 892892b8-cff7-5e74-be54-acab407b4ec6
+    name: anon-route
     path_prefix: /internal/anon
     target_url: https://httpbin.org
     auth_mode: anonymous
-    anonymous_key: anon-principal
-    source_cidrs: ["0.0.0.0/0", "::/0"]
-    provider_key: openai-prod
-
+    source_cidrs:
+      - 0.0.0.0/0
+      - ::/0
+    provider_key_id: 6dd1461f-b67e-514b-89fd-6700995f1b7c
+    anonymous_key_id: 9aeb246c-ed38-5bef-a854-c8565ca95fb4
 mcp_auth_settings: []
+

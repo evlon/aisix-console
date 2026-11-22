@@ -11,18 +11,19 @@ English: [README.md](README.md)
 
 网关二进制由 CI 构建，采用**双轨**策略（见 `.github/workflows/build-image.yml`）：
 
-- **stable** —— 跟随 `api7/aisix` 的**最新 release**：构建时经 GitHub API 取
-  `releases/latest` 的 tag；取不到（限流/临时故障）则回退到
-  `AISIX_STABLE_FALLBACK`（当前为 `v0.9.0`）。产物发布为 `:latest`（打 tag 时另有 `:v*`）。
+- **stable** —— 从 `api7/aisix` 的**钉定 ref** 构建（`AISIX_STABLE_REF`，当前 `v1.11.0`），
+  **刻意不跟 `releases/latest`**。发布为 `:latest`（打 tag 时另有 `:v*`）。
 - **edge** —— 从 `api7/aisix` 的 `main` 构建（最新特性），发布为 `:edge`。
   每晚刷新，也可在 Actions 页手动 `workflow_dispatch`（`track=edge`）。
 
-> ⚠️ **stable 轨道跟随 release，所以它会「跟着走」。** 上游的 release 工作流用
-> `gh release create ... --draft` 建**草稿**，而 `releases/latest` 不认草稿 —— 因此某次
-> 构建拿到的网关版本可能比你预期的旧。实测（2026-11）：`:latest` 当时对应
-> `aisix-1.10.0`，因为 `v1.11.0` 的 release 还是草稿。
-> 这对 `_format_version: "2"` 的配置文件是硬性影响：**只有网关 ≥ 1.11 能读 format 2**。
-> 要固定版本，请把镜像钉到具体 tag（如 `aisix-1.11.0`），不要用 `:latest`。
+> ⚠️ **为什么 stable 钉版本而不跟最新 release。** 控制台会写并校验
+> `_format_version: "2"`，而**只有 ≥1.11 的网关能读** —— 所以「最新 release」可能给你
+> 一个会拒绝控制台自己产出的文件的 `aisix`。这不是假设：在 `v1.11.0` 的 GitHub release
+> 还是**草稿**期间，`releases/latest` 解析到的是 **1.10.0**。
+> 钉定还能让构建可复现。想要更新的网关就改 `AISIX_STABLE_REF`；下面的 schema 门禁仍会在
+> 「钉定的网关拒绝控制台的 CI 示例」时让构建失败 —— 而且它确实抓到过一次反向的不匹配
+> （网关升到 1.11，而示例还是 v1）。
+> 单次运行可用 `aisix_ref` 输入覆盖。
 
 每个镜像都带一个 `aisix.version` OCI 标签，记录网关构建版本
 （`docker inspect --format '{{.Config.Labels}}' <image>`）。
@@ -144,6 +145,11 @@ aisix ≥ 1.11 要求 `_format_version: "2"` 且**每行都带 UUID `id`**；见
 「resources.yaml 的文件格式」一节。把 v1 文件指向 1.11+ 网关**之前**必须先迁移 ——
 格式对不上是**整个文件加载失败**，不是某一行被拒。控制台在文件是 v1 时会显示横幅并提供
 一键迁移；`node server/scripts/migrate-resources-v2.mjs` 是等价的离线做法。
+
+**出厂的脚手架就是 v2。** `deploy/resources.template.yaml`（`run.sh` 会给全新数据目录
+播种它）声明 `_format_version: "2"`，控制台自己的「创建空模板」也一样。**空的 v2 文档是
+合法的** —— 「每行必须带 id」只约束存在的行。若网关**早于 1.11**，必须把那一行改成 `"1"`，
+否则网关**根本不会启动**。
 
 ## 拆分部署：只跑控制台（网关在别的容器里）
 

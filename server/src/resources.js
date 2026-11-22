@@ -85,7 +85,11 @@ const COMPOSITE_IDENTITIES = {
 };
 
 export function bootstrapTemplate() {
-  const doc = { _format_version: '1' };
+  // v2 is the default: an EMPTY v2 document is valid (the per-row `id`
+  // requirement only binds rows), and the project now targets aisix >= 1.11,
+  // which rejects "1" outright. A gateway older than 1.11 cannot read this —
+  // change the single version line to "1" for one of those.
+  const doc = { _format_version: FORMAT_VERSION_V2 };
   for (const kind of KINDS) doc[kind] = [];
   return doc;
 }

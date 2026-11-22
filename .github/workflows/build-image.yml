@@ -2,13 +2,17 @@
 # (gateway + console), pushed to GHCR.
 #
 # Gateway source (two-track):
-#   stable  → api7/aisix LATEST RELEASE, fetched at build time via the
-#             GitHub API (includes claim_mappings, which the console
-#             writes). The validate gate below rejects gateway-schema
-#             drift before any image is pushed, so stable always tracks
-#             the newest compatible release. Override with aisix_ref.
-#             (evlon/aisix fork is retired — both tracks use api7/aisix.)
-#             → :latest + :aisix-X.Y.Z
+#   stable  → api7/aisix at a PINNED ref (AISIX_STABLE_REF), not "latest
+#             release". The console writes and validates
+#             `_format_version: "2"`, which only a gateway >= 1.11 accepts, so
+#             following whatever release is newest can bundle an `aisix` that
+#             rejects the console's own files. That happened: while v1.11.0's
+#             release was a draft, releases/latest resolved to 1.10.0.
+#             The validate gate below still rejects gateway-schema drift
+#             before any image is pushed — it caught exactly this when the
+#             pin's gateway upgraded past the console's CI sample.
+#             Override with aisix_ref.  (evlon/aisix fork is retired — both
+#             tracks use api7/aisix.)          → :latest + :aisix-X.Y.Z
 #   edge    → api7/aisix main (newest features)        → :edge (dispatch only)
 #   aisix_ref input overrides the track default.
 #
@@ -24,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: "stable = api7/aisix latest release; edge = api7/aisix main (newest features)"
+        description: "stable = api7/aisix at the pinned AISIX_STABLE_REF; edge = api7/aisix main (newest features)"
         required: false
         default: "stable"
       aisix_ref:
@@ -43,14 +47,19 @@ env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/evlon/aisix-console
   # Default gateway refs per track.
-  #   stable → api7/aisix latest release (fetched at build time). The
-  #            validate gate rejects schema drift before push, so it is
-  #            safe to always track the newest release. AISIX_STABLE_FALLBACK
-  #            is only used if the GitHub API call to find the latest release
-  #            fails (transient network / rate-limit). Override with aisix_ref.
+  #   stable → PINNED, deliberately not "latest release". The console now
+  #            writes and validates `_format_version: "2"`, which only a
+  #            gateway >= 1.11 can read, so tracking whatever release happens
+  #            to be newest can produce an image whose bundled `aisix` rejects
+  #            the very files the console writes ("unrecognized
+  #            _format_version"). That is a silent trap, not a hypothetical:
+  #            while v1.11.0's release was still a DRAFT, releases/latest
+  #            resolved to 1.10.0. Bump this line when a newer gateway is
+  #            wanted; the validate gate below fails the build if the pinned
+  #            gateway rejects the console's own CI sample.
   #   edge   → api7/aisix main (newest features).
   AISIX_STABLE_REPO: "api7/aisix"
-  AISIX_STABLE_FALLBACK: "v0.9.0"
+  AISIX_STABLE_REF: "v1.11.0"
   AISIX_EDGE_REPO: "api7/aisix"
 
 permissions:
@@ -99,25 +108,9 @@ jobs:
           else
             repo="${{ env.AISIX_STABLE_REPO }}"
             echo "repo=$repo" >> "$GITHUB_OUTPUT"
-            if [ -n "${{ inputs.aisix_ref }}" ]; then
-              ref="${{ inputs.aisix_ref }}"
-            else
-              # Fetch the latest release tag via the GitHub API. On transient
-              # failure / rate-limit, fall back to AISIX_STABLE_FALLBACK.
-              ref="${{ env.AISIX_STABLE_FALLBACK }}"
-              tag="$(
-                curl -fsSL \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "Authorization: Bearer ${{ github.token }}" \
-                  "https://api.github.com/repos/${{ env.AISIX_STABLE_REPO }}/releases/latest" \
-                | jq -r '.tag_name // empty' 2>/dev/null || true
-              )"
-              if [ -n "$tag" ]; then
-                ref="$tag"
-              else
-                echo "::warning::could not fetch latest stable release, using fallback $ref"
-              fi
-            fi
+            # Pinned, or overridden per run. Deliberately NOT releases/latest:
+            # see AISIX_STABLE_REF above.
+            ref="${{ inputs.aisix_ref || env.AISIX_STABLE_REF }}"
             echo "ref=$ref" >> "$GITHUB_OUTPUT"
             echo "::notice::Resolved gateway source → repo=$repo ref=$ref (track=$track)"
           fi
@@ -264,5 +257,5 @@ jobs:
             echo "- track: ${{ needs.build-gateway.outputs.track }}"
             echo "- aisix.version: ${{ env.AISIX_VERSION }}"
             echo "- image tags: ${{ steps.meta.outputs.tags }}"
-            echo "- resolved gateway ref: ${{ needs.build-gateway.outputs.track == 'edge' && 'api7/aisix@main' || 'api7/aisix latest release' }}"
+            echo "- resolved gateway ref: ${{ needs.build-gateway.outputs.track == 'edge' && 'api7/aisix@main' || 'api7/aisix at the pinned stable ref' }}"
           } >> "$GITHUB_STEP_SUMMARY"
