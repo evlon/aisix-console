@@ -27,6 +27,8 @@ export default {
 
     // ── the fixed six questions ──
     factWhat: '它是什么',
+    factsMore: '展开其余说明 ▾',
+    factsLess: '收起 ▴',
     factWhen: '什么时候要',
     factEffect: '配了会怎样',
     factAbsent: '不配会怎样',

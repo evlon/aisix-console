@@ -60,6 +60,26 @@ th {
   letter-spacing: 0.04em;
 }
 
+/* Field help is available on demand.
+   Measured before this: a modal with eight fields carried eight 30px help lines,
+   which is most of a 643px viewport spent on text you read once. The help now
+   appears when the pointer is on the row or the row has focus — i.e. exactly when
+   it is being read — and the label carries a dotted underline so its presence is
+   discoverable. Nothing was removed; the same strings are one hover away. */
+.form-row > .fh {
+  display: none;
+}
+
+.form-row:hover > .fh,
+.form-row:focus-within > .fh {
+  display: block;
+}
+
+.form-row:has(> .fh) > label {
+  border-bottom: 1px dotted var(--border);
+  padding-bottom: 1px;
+}
+
 input,
 select,
 textarea {

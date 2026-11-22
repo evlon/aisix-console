@@ -27,6 +27,8 @@ export default {
 
     // ── the fixed six questions ──
     factWhat: 'What it is',
+    factsMore: 'More about it ▾',
+    factsLess: 'Less ▴',
     factWhen: 'When you need it',
     factEffect: 'What it does',
     factAbsent: 'If you skip it',

@@ -1,11 +1,15 @@
 <script setup>
-// One card in the resource catalogue: what this resource is for, what changes
-// once it is configured, what happens without it, and the single most
-// expensive mistake specific to it.
+// One card in the resource catalogue: what this resource is for, the count, where
+// it is maintained, and the single most expensive mistake specific to it.
 //
-// The "trap" line is deliberately one line per kind and not a generic "this can
-// fail silently" badge — a marker that appears on every card carries no
-// information. The trap text is `resourceCatalog.kind.<key>.trap`.
+// The effect and "without it" answers are NOT repeated here. They are the same
+// strings the detail page's band shows, one click away, and carrying them on all
+// 21 cards made every card 256px tall — a catalogue that is meant to be scanned
+// filled three screens. Measured: dropping those two rows takes a card to ~155px.
+//
+// The "trap" line stays, and stays unclamped: it is one line per kind and not a
+// generic "this can fail silently" badge — a marker that appears on every card
+// carries no information. The trap text is `resourceCatalog.kind.<key>.trap`.
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -41,13 +45,9 @@ const txt = (suffix) => {
 
     <p class="one">{{ txt('oneLiner') }}</p>
 
-    <dl class="fact">
-      <dt>{{ t('resourceCatalog.factEffect') }}</dt>
-      <dd>{{ txt('effect') }}</dd>
-      <dt>{{ t('resourceCatalog.factAbsent') }}</dt>
-      <dd class="muted">{{ txt('ifAbsent') }}</dd>
-      <dt v-if="txt('trap')">{{ t('resourceCatalog.trapLabel') }}</dt>
-      <dd v-if="txt('trap')" class="trap">{{ txt('trap') }}</dd>
+    <dl v-if="txt('trap')" class="fact">
+      <dt>{{ t('resourceCatalog.trapLabel') }}</dt>
+      <dd class="trap">{{ txt('trap') }}</dd>
     </dl>
 
     <div class="foot">
@@ -66,7 +66,7 @@ const txt = (suffix) => {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   cursor: pointer;
@@ -85,7 +85,7 @@ const txt = (suffix) => {
 }
 .one {
   color: var(--muted);
-  margin: 6px 0 10px;
+  margin: 5px 0 8px;
 }
 .fact {
   display: grid;
@@ -107,8 +107,8 @@ const txt = (suffix) => {
   color: #fcd34d;
 }
 .foot {
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: auto;
+  padding-top: 9px;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
