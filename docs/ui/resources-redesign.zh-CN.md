@@ -419,6 +419,7 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 | **编辑层表单** | `Resources.vue` 表单的 **64 个字段标签全部改为中文**（原为 `auth_type`、`forward_client_headers` 这类配置键名，共 68 处）。三层解析：每资源覆盖 → 共享 `field.*` → 表格列标签 `col.*` → 原键名兜底 |
 | **字段说明文字** | 68 个表单行各一行说明（输入框下方、跨第二列），中英各 50 条（46 共享 + 4 按资源覆盖）。测试要求**每个字段都有说明**，且**没有无人使用的说明文案** |
 | **「策略」页浏览层** | 复用同一套六问说明带（`ResourceFacts`，文案直接复用）；表格列定义抽到 `PAGE_COLS`，表头由 `resourceCatalog.col.*` 解析 —— 原先中文界面里显示 `SCOPE_REF`/`APPLIES_TO`/`HOOK_POINT` |
+| **「策略」页表单** | 三张表单（护栏 / 限流 / 缓存）**112 处标签**全部改走目录文案，含 48 个护栏厂商字段（`access_key_id`、`analyzer_url`、`halt_on_blocklist_hit` 等）；每个字段一行说明；页内 26 个旧标签键删除 |
 | 修掉的真缺陷 | `Dashboard.vue` 里「被拒绝的资源」表头写成「上游密钥」——抽取共用组件后由构造消除 |
 | 测试 | 新增 `server/test/effectChecks.test.js`(23) 与 `web/test/resourceCatalog.test.js`(12)；**server 83 项、web 34 项全通过** |
 | 构建 | `npx vite build` 通过 |
@@ -436,15 +437,24 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 1. 目录页多了一个标题 —— `App.vue` 已按路由渲染页面标题，我又写了一个 `h1`，重复；已去掉自己的标题，详情页的资源名降为二级标题。
 2. **网关不可达时反馈条仍宣称「本次加载全部通过」** —— 判断条件写成了 `!config`，而状态接口在网关掉线时返回的是 `{reachable:false}` 对象、不是 null。这正是本设计要消灭的「假安心」，已改为按「有没有 state 字段」判断，并在无裁决时显示「网关不可达，无法确认配置是否被加载」。
 
-**P3 进行中**：资源集成编辑层的**字段标签**与**字段说明文字**都已完成；
-**「策略」页**的浏览层（六问 + 表头）也已完成，但它的**护栏表单**还有 56 处裸键名
-（各厂商护栏的专有字段：`access_key_id`、`analyzer_url`、`halt_on_blocklist_hit` 等），
-以及「资源集成」的 `PAGE_COLS` 之外的列，留待下一步。
+**P3 已完成**：资源集成与「策略」页的**浏览层与编辑层**都改完了 —— 目录/六问、字段标签、逐字段说明、
+生效自检、保存反馈；两页的 21+3 种资源都不再直接暴露配置键名。
 
-**一个只有渲染才能发现的坑**：`verify` 等文案里含裸花括号（curl 的 JSON、正则 `{0,62}`、指标 `{outcome=...}`）
-会让 vue-i18n 的消息编译失败，**组件静默渲染成一个注释节点、浏览器控制台没有任何报错**。
-它让 4 种资源（`mcp_servers`、`teams`、`cache_policies`、`rate_limit_policies`）的说明带整体消失。
-现在有一条测试禁止未转义的花括号，字面量必须写成 `{'{'}` / `{'}'}`。
+**还没做的是 P3 之外的事**：给 7 种「只有原始 YAML」的资源（`teams`/`users`/`pricing`/`budgets`/
+`budget_policy`/`usage_accounting`/`mcp_policies`）补表单；以及 A 档其余页面（`ApiKeys`、`Models`）
+的说明层。`ApiKeys` 的表单标签已基本中文化（「高级」折叠区里还有 10 处键名）。
+
+**两个只有渲染才能发现的坑，都记在这里**：
+1. 文案里的**裸花括号**（curl 的 JSON、正则 `{0,62}`、指标 `{outcome=...}`）会让 vue-i18n 编译失败，
+   **组件静默渲染成一个注释节点**。它让 4 种资源的说明带整体消失。
+2. **模板用了 `FL()` 而 `<script setup>` 没定义它** —— 构建不会报（模板在运行时才从作用域取），
+   运行时抛 `e.FL is not a function`，表现为**弹窗根本打不开**。Policies 页就是这样：标签改了、辅助函数没加。
+
+两条都补了守卫：文案不得含未转义花括号（见第 1 条的小节）；调用 `FL()`/`FH()` 的视图必须定义它们。
+
+**还有一条教训是关于我的检查手段**：`opencli browser console` 连我自己写的 `console.error` 都抓不到
+（返回 count: 0），所以这轮里我说的「控制台无报错」**全部不成立**。可靠做法是在页面内包一层
+`console.error`，一次就定位到了第 2 个坑。
 
 ---
 
