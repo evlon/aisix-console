@@ -53,7 +53,10 @@ th {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
-  text-transform: uppercase;
+  /* No text-transform: it was here for headers that WERE the configuration keys
+     (SCOPE_REF, ALLOWED_MODELS). The headers are Chinese prose now, so the only
+     thing it still did was shout the odd latin unit — 「每千 token」 in a form
+     became 「每千 TOKEN」 in the table header, the same label twice over. */
   letter-spacing: 0.04em;
 }
 
