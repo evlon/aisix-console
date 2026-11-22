@@ -618,6 +618,30 @@ function colLabel(field) {
   return te(key) ? t(key) : field;
 }
 
+// Form field labels and help, resolved from the catalogue copy exactly as the
+// resource catalogue does it: the per-kind override, then the shared field.*,
+// then the table-column label, then the raw key. Absent from this file, a
+// template that calls FL() throws at render time and the modal silently fails to
+// appear — the build cannot see it, because the template resolves it at runtime.
+// web/test/resourceCatalog.test.js now asserts both helpers exist wherever they
+// are used.
+const FL = (kind, field) => {
+  const keys = [
+    `resourceCatalog.kind.${kind}.field.${field}`,
+    `resourceCatalog.field.${field}`,
+    `resourceCatalog.col.${field}`,
+  ];
+  for (const key of keys) if (te(key)) return t(key);
+  return field;
+};
+
+const FH = (kind, field) => {
+  for (const key of [`resourceCatalog.kind.${kind}.fieldHelp.${field}`, `resourceCatalog.fieldHelp.${field}`]) {
+    if (te(key)) return t(key);
+  }
+  return '';
+};
+
 function cell(e, col) {
   if (col === 'limits') return `${e.max_requests ? e.max_requests + ' req' : ''}${e.max_tokens ? (e.max_requests ? ' / ' : '') + e.max_tokens + ' tok' : ''}`;
   if (col === 'ttl') return `${e.ttl_seconds}s`;
@@ -688,11 +712,12 @@ onMounted(load);
         <!-- rate limit policy -->
         <template v-if="activeKind === 'rate_limit_policies'">
           <div class="form-row">
-            <label>{{ t('policies.rlName') }} *</label>
+            <label>{{ FL('rate_limit_policies', 'name') }} *</label>
             <input v-model="form.name" placeholder="key-rpm" />
+            <p v-if="FH('rate_limit_policies', 'name')" class="fh">{{ FH('rate_limit_policies', 'name') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.rlScope') }}</label>
+            <label>{{ FL('rate_limit_policies', 'scope') }}</label>
             <select v-model="form.scope">
               <option value="api_key">api_key</option>
               <option value="model">model</option>
@@ -700,9 +725,10 @@ onMounted(load);
               <option value="member">member</option>
               <option value="team_member">team_member</option>
             </select>
+            <p v-if="FH('rate_limit_policies', 'scope')" class="fh">{{ FH('rate_limit_policies', 'scope') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.rlScopeRef') }}</label>
+            <label>{{ FL('rate_limit_policies', 'scope_ref') }}</label>
             <select v-if="form.scope === 'api_key'" v-model="form.scope_ref">
               <option value="">{{ t('policies.choose') }}</option>
               <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
@@ -712,47 +738,55 @@ onMounted(load);
               <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
             </select>
             <input v-else v-model="form.scope_ref" placeholder="team/member ID" />
+            <p v-if="FH('rate_limit_policies', 'scope_ref')" class="fh">{{ FH('rate_limit_policies', 'scope_ref') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.rlWindow') }}</label>
+            <label>{{ FL('rate_limit_policies', 'window') }}</label>
             <select v-model="form.window">
               <option value="second">second</option>
               <option value="minute">minute</option>
               <option value="hour">hour</option>
               <option value="day">day</option>
             </select>
+            <p v-if="FH('rate_limit_policies', 'window')" class="fh">{{ FH('rate_limit_policies', 'window') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.rlMax') }}</label>
+            <label>{{ FL('rate_limit_policies', 'max_requests') }}</label>
             <div style="display: flex; gap: 6px">
               <input v-model="form.max_requests" type="number" :placeholder="t('policies.rlMaxRequests')" style="flex: 1" />
               <input v-model="form.max_tokens" type="number" :placeholder="t('policies.rlMaxTokens')" style="flex: 1" />
             </div>
+            <p v-if="FH('rate_limit_policies', 'max_requests')" class="fh">{{ FH('rate_limit_policies', 'max_requests') }}</p>
           </div>
           <details style="margin-top: 10px">
             <summary>{{ t('policies.rlAdvanced') }}</summary>
             <div class="form-row">
-              <label>action</label>
+              <label>{{ FL('rate_limit_policies', 'action') }}</label>
               <select v-model="form.action">
                 <option value="">{{ t('policies.rlActionDefault') }}</option>
                 <option value="reject">reject</option>
               </select>
+              <p v-if="FH('rate_limit_policies', 'action')" class="fh">{{ FH('rate_limit_policies', 'action') }}</p>
             </div>
             <div class="form-row">
-              <label>conditions (JSON)</label>
+              <label>{{ FL('rate_limit_policies', 'conditions') }}</label>
               <textarea v-model="form.conditions_text" rows="4" style="flex: 1" placeholder='[{"dimension":"api_key","operator":"in","value":["k1"]}]' />
+              <p v-if="FH('rate_limit_policies', 'conditions')" class="fh">{{ FH('rate_limit_policies', 'conditions') }}</p>
             </div>
             <div class="form-row">
-              <label>group_by (JSON)</label>
+              <label>{{ FL('rate_limit_policies', 'group_by') }}</label>
               <textarea v-model="form.group_by_text" rows="2" style="flex: 1" placeholder='["model","provider"]' />
+              <p v-if="FH('rate_limit_policies', 'group_by')" class="fh">{{ FH('rate_limit_policies', 'group_by') }}</p>
             </div>
             <div class="form-row">
-              <label>limits (JSON)</label>
+              <label>{{ FL('rate_limit_policies', 'limits') }}</label>
               <textarea v-model="form.limits_text" rows="4" style="flex: 1" placeholder='{"rate": {"second": 10}, "tokens": {"minute": 100000}}' />
+              <p v-if="FH('rate_limit_policies', 'limits')" class="fh">{{ FH('rate_limit_policies', 'limits') }}</p>
             </div>
             <div class="form-row">
-              <label>schedules (JSON)</label>
+              <label>{{ FL('rate_limit_policies', 'schedules') }}</label>
               <textarea v-model="form.schedules_text" rows="3" style="flex: 1" placeholder='[{"start":"09:00","end":"17:00","weekdays":["mon"]}]' />
+              <p v-if="FH('rate_limit_policies', 'schedules')" class="fh">{{ FH('rate_limit_policies', 'schedules') }}</p>
             </div>
           </details>
         </template>
@@ -760,26 +794,30 @@ onMounted(load);
         <!-- cache policy -->
         <template v-else-if="activeKind === 'cache_policies'">
           <div class="form-row">
-            <label>{{ t('policies.cacheName') }} *</label>
+            <label>{{ FL('cache_policies', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('cache_policies', 'name')" class="fh">{{ FH('cache_policies', 'name') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.cacheEnabled') }}</label>
+            <label>{{ FL('cache_policies', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('cache_policies', 'enabled')" class="fh">{{ FH('cache_policies', 'enabled') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.cacheBackend') }}</label>
+            <label>{{ FL('cache_policies', 'backend') }}</label>
             <select v-model="form.backend">
               <option value="memory">memory</option>
               <option value="redis">redis</option>
             </select>
+            <p v-if="FH('cache_policies', 'backend')" class="fh">{{ FH('cache_policies', 'backend') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.cacheTtl') }}</label>
+            <label>{{ FL('cache_policies', 'ttl') }}</label>
             <input v-model="form.ttl_seconds" type="number" />
+            <p v-if="FH('cache_policies', 'ttl')" class="fh">{{ FH('cache_policies', 'ttl') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.cacheAppliesTo') }}</label>
+            <label>{{ FL('cache_policies', 'applies_to') }}</label>
             <div style="display: flex; gap: 6px; flex: 1">
               <select v-model="form.applies_type" style="width: 130px">
                 <option value="all">all</option>
@@ -795,19 +833,22 @@ onMounted(load);
                 <option v-for="k in apiKeys" :key="k" :value="k">{{ k }}</option>
               </select>
             </div>
+            <p v-if="FH('cache_policies', 'applies_to')" class="fh">{{ FH('cache_policies', 'applies_to') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.cacheScope') }}</label>
+            <label>{{ FL('cache_policies', 'scope') }}</label>
             <select v-model="form.scope">
               <option value="api_key">{{ t('policies.cacheScopeApiKey') }}</option>
               <option value="env">{{ t('policies.cacheScopeEnv') }}</option>
             </select>
+            <p v-if="FH('cache_policies', 'scope')" class="fh">{{ FH('cache_policies', 'scope') }}</p>
           </div>
           <details style="margin-top: 10px">
             <summary>{{ t('policies.cacheAdvanced') }}</summary>
             <div class="form-row">
-              <label>semantic (JSON)</label>
+              <label>{{ FL('cache_policies', 'semantic') }}</label>
               <textarea v-model="form.semantic_text" rows="4" style="flex: 1" placeholder='{"embedding_model": "text-embedding", "match_threshold": 0.9, "ttl_seconds": 300}' />
+              <p v-if="FH('cache_policies', 'semantic')" class="fh">{{ FH('cache_policies', 'semantic') }}</p>
             </div>
           </details>
         </template>
@@ -815,11 +856,12 @@ onMounted(load);
         <!-- guardrail -->
         <template v-else>
           <div class="form-row">
-            <label>{{ t('policies.grName') }} *</label>
+            <label>{{ FL('guardrails', 'name') }} *</label>
             <input v-model="form.name" />
+            <p v-if="FH('guardrails', 'name')" class="fh">{{ FH('guardrails', 'name') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grKind') }}</label>
+            <label>{{ FL('guardrails', 'kind') }}</label>
             <select v-model="form.kind">
               <option value="keyword">{{ t('policies.keyword') }}</option>
               <option value="pii">{{ t('policies.pii') }}</option>
@@ -833,41 +875,46 @@ onMounted(load);
               <option value="aliyun_ai_guardrail">{{ t('policies.aliyunAiGuardrail') }}</option>
               <option value="custom">{{ t('policies.custom') }}</option>
             </select>
+            <p v-if="FH('guardrails', 'kind')" class="fh">{{ FH('guardrails', 'kind') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grInputMessages') }}</label>
+            <label>{{ FL('guardrails', 'input_messages') }}</label>
             <select v-model="form.input_messages">
               <option value="all">all</option>
               <option value="last">last</option>
             </select>
+            <p v-if="FH('guardrails', 'input_messages')" class="fh">{{ FH('guardrails', 'input_messages') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grHook') }}</label>
+            <label>{{ FL('guardrails', 'hook_point') }}</label>
             <select v-model="form.hook_point">
               <option value="input">{{ t('policies.grHookInput') }}</option>
               <option value="output">{{ t('policies.grHookOutput') }}</option>
               <option value="both">{{ t('policies.grHookBoth') }}</option>
             </select>
+            <p v-if="FH('guardrails', 'hook_point')" class="fh">{{ FH('guardrails', 'hook_point') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grEnforcement') }}</label>
+            <label>{{ FL('guardrails', 'enforcement_mode') }}</label>
             <select v-model="form.enforcement_mode">
               <option value="block">{{ t('policies.grEnforceBlock') }}</option>
               <option value="monitor">{{ t('policies.grEnforceMonitor') }}</option>
             </select>
+            <p v-if="FH('guardrails', 'enforcement_mode')" class="fh">{{ FH('guardrails', 'enforcement_mode') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grDirection') }}</label>
+            <label>{{ FL('guardrails', 'direction') }}</label>
             <select v-model="form.direction">
               <option value="both">{{ t('policies.grDirBoth') }}</option>
               <option value="input">{{ t('policies.grDirInput') }}</option>
               <option value="output">{{ t('policies.grDirOutput') }}</option>
             </select>
+            <p v-if="FH('guardrails', 'direction')" class="fh">{{ FH('guardrails', 'direction') }}</p>
           </div>
           <!-- keyword -->
           <template v-if="form.kind === 'keyword'">
             <div class="form-row">
-              <label>{{ t('policies.grPatterns') }}</label>
+              <label>{{ FL('guardrails', 'patterns') }}</label>
               <div style="flex: 1">
                 <div v-for="(p, i) in form.patterns" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px">
                   <select v-model="p.kind" style="width: 110px">
@@ -879,47 +926,54 @@ onMounted(load);
                 </div>
                 <button @click="form.patterns.push({ kind: 'literal', value: '' })">+ {{ t('common.add') }}</button>
               </div>
+              <p v-if="FH('guardrails', 'patterns')" class="fh">{{ FH('guardrails', 'patterns') }}</p>
             </div>
           </template>
 
           <!-- custom (operator-supplied script) -->
           <template v-else-if="form.kind === 'custom'">
             <div class="form-row">
-              <label>script *</label>
+              <label>{{ FL('guardrails', 'script') }} *</label>
               <textarea v-model="form.script" rows="8" style="flex: 1" placeholder="export async function checkInput(ctx) { … }" />
+              <p v-if="FH('guardrails', 'script')" class="fh">{{ FH('guardrails', 'script') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>max_buffer_bytes</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- pii -->
           <template v-else-if="form.kind === 'pii'">
             <div class="form-row">
-              <label>{{ t('policies.grPiiDefaultAction') }}</label>
+              <label>{{ FL('guardrails', 'default_action') }}</label>
               <select v-model="form.default_action">
                 <option value="mask">mask</option>
                 <option value="block">block</option>
               </select>
+              <p v-if="FH('guardrails', 'default_action')" class="fh">{{ FH('guardrails', 'default_action') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grPiiDetectors') }}</label>
+              <label>{{ FL('guardrails', 'detectors') }}</label>
               <div style="flex: 1">
                 <div v-for="(d, i) in form.detectors" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px">
                   <select v-model="d.type" style="flex: 1">
@@ -943,9 +997,10 @@ onMounted(load);
                 </div>
                 <button @click="form.detectors.push({ type: '', action: '' })">+ {{ t('common.add') }}</button>
               </div>
+              <p v-if="FH('guardrails', 'detectors')" class="fh">{{ FH('guardrails', 'detectors') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grPiiCustomPatterns') }}</label>
+              <label>{{ FL('guardrails', 'custom_patterns') }}</label>
               <div style="flex: 1">
                 <div v-for="(p, i) in form.custom_patterns" :key="i" style="border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px">
                   <div style="display: flex; gap: 6px; margin-bottom: 6px">
@@ -961,102 +1016,121 @@ onMounted(load);
                 </div>
                 <button @click="form.custom_patterns.push({ name: '', regex: '', action: '' })">+ {{ t('common.add') }}</button>
               </div>
+              <p v-if="FH('guardrails', 'custom_patterns')" class="fh">{{ FH('guardrails', 'custom_patterns') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
           </template>
 
           <!-- openai_moderation -->
           <template v-else-if="form.kind === 'openai_moderation'">
             <div class="form-row">
-              <label>api_key *</label>
+              <label>{{ FL('guardrails', 'api_key') }} *</label>
               <input v-model="form.api_key" type="password" placeholder="sk-..." />
+              <p v-if="FH('guardrails', 'api_key')" class="fh">{{ FH('guardrails', 'api_key') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint</label>
+              <label>{{ FL('guardrails', 'endpoint') }}</label>
               <input v-model="form.endpoint" placeholder="https://api.openai.com/v1" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>model</label>
+              <label>{{ FL('guardrails', 'model') }}</label>
               <input v-model="form.model" />
+              <p v-if="FH('guardrails', 'model')" class="fh">{{ FH('guardrails', 'model') }}</p>
             </div>
             <div class="form-row">
-              <label>category_thresholds (JSON)</label>
+              <label>{{ FL('guardrails', 'category_thresholds') }}</label>
               <textarea v-model="form.category_thresholds_text" rows="3" style="flex: 1" placeholder='{"violence": 0.5}' />
+              <p v-if="FH('guardrails', 'category_thresholds')" class="fh">{{ FH('guardrails', 'category_thresholds') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- lakera -->
           <template v-else-if="form.kind === 'lakera'">
             <div class="form-row">
-              <label>api_key *</label>
+              <label>{{ FL('guardrails', 'api_key') }} *</label>
               <input v-model="form.api_key" type="password" placeholder="sk-..." />
+              <p v-if="FH('guardrails', 'api_key')" class="fh">{{ FH('guardrails', 'api_key') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint</label>
+              <label>{{ FL('guardrails', 'endpoint') }}</label>
               <input v-model="form.endpoint" placeholder="https://api.lakera.ai" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>project_id</label>
+              <label>{{ FL('guardrails', 'project_id') }}</label>
               <input v-model="form.project_id" placeholder="project-..." />
+              <p v-if="FH('guardrails', 'project_id')" class="fh">{{ FH('guardrails', 'project_id') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
           </template>
 
           <!-- presidio -->
           <template v-else-if="form.kind === 'presidio'">
             <div class="form-row">
-              <label>analyzer_url *</label>
+              <label>{{ FL('guardrails', 'analyzer_url') }} *</label>
               <input v-model="form.analyzer_url" placeholder="http://presidio-analyzer:3000" />
+              <p v-if="FH('guardrails', 'analyzer_url')" class="fh">{{ FH('guardrails', 'analyzer_url') }}</p>
             </div>
             <div class="form-row">
-              <label>anonymizer_url *</label>
+              <label>{{ FL('guardrails', 'anonymizer_url') }} *</label>
               <input v-model="form.anonymizer_url" placeholder="http://presidio-anonymizer:3000" />
+              <p v-if="FH('guardrails', 'anonymizer_url')" class="fh">{{ FH('guardrails', 'anonymizer_url') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grPiiDefaultAction') }}</label>
+              <label>{{ FL('guardrails', 'default_action') }}</label>
               <select v-model="form.default_action">
                 <option value="mask">mask</option>
                 <option value="block">block</option>
               </select>
+              <p v-if="FH('guardrails', 'default_action')" class="fh">{{ FH('guardrails', 'default_action') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grPresidioEntities') }}</label>
+              <label>{{ FL('guardrails', 'entities') }}</label>
               <div style="flex: 1">
                 <div v-for="(en, i) in form.entities" :key="i" style="display: flex; gap: 6px; margin-bottom: 6px">
                   <input v-model="en.type" placeholder="PERSON / EMAIL_ADDRESS" style="flex: 1" />
@@ -1069,318 +1143,380 @@ onMounted(load);
                 </div>
                 <button @click="form.entities.push({ type: '', action: '' })">+ {{ t('common.add') }}</button>
               </div>
+              <p v-if="FH('guardrails', 'entities')" class="fh">{{ FH('guardrails', 'entities') }}</p>
             </div>
             <div class="form-row">
-              <label>operator</label>
+              <label>{{ FL('guardrails', 'operator') }}</label>
               <select v-model="form.operator">
                 <option value="replace">replace</option>
                 <option value="mask">mask</option>
                 <option value="hash">hash</option>
                 <option value="redact">redact</option>
               </select>
+              <p v-if="FH('guardrails', 'operator')" class="fh">{{ FH('guardrails', 'operator') }}</p>
             </div>
             <div class="form-row">
-              <label>language</label>
+              <label>{{ FL('guardrails', 'language') }}</label>
               <input v-model="form.language" placeholder="en" />
+              <p v-if="FH('guardrails', 'language')" class="fh">{{ FH('guardrails', 'language') }}</p>
             </div>
             <div class="form-row">
-              <label>score_threshold</label>
+              <label>{{ FL('guardrails', 'score_threshold') }}</label>
               <input v-model="form.score_threshold" type="number" step="0.01" min="0" max="1" />
+              <p v-if="FH('guardrails', 'score_threshold')" class="fh">{{ FH('guardrails', 'score_threshold') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
           </template>
 
           <!-- azure_content_safety (Prompt Shield) -->
           <template v-else-if="form.kind === 'azure_content_safety'">
             <div class="form-row">
-              <label>api_key *</label>
+              <label>{{ FL('guardrails', 'api_key') }} *</label>
               <input v-model="form.api_key" type="password" placeholder="Ocp-Apim-Subscription-Key" />
+              <p v-if="FH('guardrails', 'api_key')" class="fh">{{ FH('guardrails', 'api_key') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint *</label>
+              <label>{{ FL('guardrails', 'endpoint') }} *</label>
               <input v-model="form.endpoint" placeholder="https://my-resource.cognitiveservices.azure.com" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- azure_content_safety_text_moderation -->
           <template v-else-if="form.kind === 'azure_content_safety_text_moderation'">
             <div class="form-row">
-              <label>api_key *</label>
+              <label>{{ FL('guardrails', 'api_key') }} *</label>
               <input v-model="form.api_key" type="password" placeholder="Ocp-Apim-Subscription-Key" />
+              <p v-if="FH('guardrails', 'api_key')" class="fh">{{ FH('guardrails', 'api_key') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint *</label>
+              <label>{{ FL('guardrails', 'endpoint') }} *</label>
               <input v-model="form.endpoint" placeholder="https://my-resource.cognitiveservices.azure.com" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>categories</label>
+              <label>{{ FL('guardrails', 'categories') }}</label>
               <div style="flex: 1">
                 <label v-for="c in ['Hate','Sexual','SelfHarm','Violence']" :key="c" style="margin-right: 12px">
                   <input type="checkbox" :value="c" v-model="form.categories" /> {{ c }}
                 </label>
               </div>
+              <p v-if="FH('guardrails', 'categories')" class="fh">{{ FH('guardrails', 'categories') }}</p>
             </div>
             <div class="form-row">
-              <label>blocklist_names (JSON)</label>
+              <label>{{ FL('guardrails', 'blocklist_names') }}</label>
               <textarea v-model="form.blocklist_names_text" rows="2" style="flex: 1" placeholder='["blocklist-a"]' />
+              <p v-if="FH('guardrails', 'blocklist_names')" class="fh">{{ FH('guardrails', 'blocklist_names') }}</p>
             </div>
             <div class="form-row">
-              <label>severity_threshold</label>
+              <label>{{ FL('guardrails', 'severity_threshold') }}</label>
               <input v-model="form.severity_threshold" type="number" min="0" max="7" />
+              <p v-if="FH('guardrails', 'severity_threshold')" class="fh">{{ FH('guardrails', 'severity_threshold') }}</p>
             </div>
             <div class="form-row">
-              <label>severity_threshold_by_category (JSON)</label>
+              <label>{{ FL('guardrails', 'severity_threshold_by_category') }}</label>
               <textarea v-model="form.severity_threshold_by_category_text" rows="2" style="flex: 1" placeholder='{"Hate": 3}' />
+              <p v-if="FH('guardrails', 'severity_threshold_by_category')" class="fh">{{ FH('guardrails', 'severity_threshold_by_category') }}</p>
             </div>
             <div class="form-row">
-              <label>output_type</label>
+              <label>{{ FL('guardrails', 'output_type') }}</label>
               <select v-model="form.output_type">
                 <option value="FourSeverityLevels">FourSeverityLevels</option>
                 <option value="EightSeverityLevels">EightSeverityLevels</option>
               </select>
+              <p v-if="FH('guardrails', 'output_type')" class="fh">{{ FH('guardrails', 'output_type') }}</p>
             </div>
             <div class="form-row">
-              <label>stream_processing_mode</label>
+              <label>{{ FL('guardrails', 'stream_processing_mode') }}</label>
               <select v-model="form.stream_processing_mode">
                 <option value="window">window</option>
                 <option value="buffer_full">buffer_full</option>
               </select>
+              <p v-if="FH('guardrails', 'stream_processing_mode')" class="fh">{{ FH('guardrails', 'stream_processing_mode') }}</p>
             </div>
             <div class="form-row">
-              <label>text_source</label>
+              <label>{{ FL('guardrails', 'text_source') }}</label>
               <select v-model="form.text_source">
                 <option value="concatenate_user_content">concatenate_user_content</option>
                 <option value="concatenate_all_content">concatenate_all_content</option>
               </select>
+              <p v-if="FH('guardrails', 'text_source')" class="fh">{{ FH('guardrails', 'text_source') }}</p>
             </div>
             <div class="form-row">
-              <label>halt_on_blocklist_hit</label>
+              <label>{{ FL('guardrails', 'halt_on_blocklist_hit') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.halt_on_blocklist_hit" /></label>
+              <p v-if="FH('guardrails', 'halt_on_blocklist_hit')" class="fh">{{ FH('guardrails', 'halt_on_blocklist_hit') }}</p>
             </div>
             <div class="form-row">
-              <label>window_size</label>
+              <label>{{ FL('guardrails', 'window_size') }}</label>
               <input v-model="form.window_size" type="number" />
+              <p v-if="FH('guardrails', 'window_size')" class="fh">{{ FH('guardrails', 'window_size') }}</p>
             </div>
             <div class="form-row">
-              <label>window_overlap_size</label>
+              <label>{{ FL('guardrails', 'window_overlap_size') }}</label>
               <input v-model="form.window_overlap_size" type="number" />
+              <p v-if="FH('guardrails', 'window_overlap_size')" class="fh">{{ FH('guardrails', 'window_overlap_size') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- bedrock -->
           <template v-else-if="form.kind === 'bedrock'">
             <div class="form-row">
-              <label>access_key_id *</label>
+              <label>{{ FL('guardrails', 'access_key_id') }} *</label>
               <input v-model="form.aws_access_key_id" />
+              <p v-if="FH('guardrails', 'access_key_id')" class="fh">{{ FH('guardrails', 'access_key_id') }}</p>
             </div>
             <div class="form-row">
-              <label>secret_access_key *</label>
+              <label>{{ FL('guardrails', 'secret_access_key') }} *</label>
               <input v-model="form.aws_secret_access_key" type="password" />
+              <p v-if="FH('guardrails', 'secret_access_key')" class="fh">{{ FH('guardrails', 'secret_access_key') }}</p>
             </div>
             <div class="form-row">
-              <label>guardrail_id *</label>
+              <label>{{ FL('guardrails', 'guardrail_id') }} *</label>
               <input v-model="form.guardrail_id" />
+              <p v-if="FH('guardrails', 'guardrail_id')" class="fh">{{ FH('guardrails', 'guardrail_id') }}</p>
             </div>
             <div class="form-row">
-              <label>guardrail_version *</label>
+              <label>{{ FL('guardrails', 'guardrail_version') }} *</label>
               <input v-model="form.guardrail_version" placeholder="DRAFT / 1" />
+              <p v-if="FH('guardrails', 'guardrail_version')" class="fh">{{ FH('guardrails', 'guardrail_version') }}</p>
             </div>
             <div class="form-row">
-              <label>region *</label>
+              <label>{{ FL('guardrails', 'region') }} *</label>
               <input v-model="form.region" placeholder="us-east-1" />
+              <p v-if="FH('guardrails', 'region')" class="fh">{{ FH('guardrails', 'region') }}</p>
             </div>
             <div class="form-row">
-              <label>latency_mode</label>
+              <label>{{ FL('guardrails', 'latency_mode') }}</label>
               <select v-model="form.latency_mode">
                 <option value="serial">serial</option>
                 <option value="timed">timed</option>
               </select>
+              <p v-if="FH('guardrails', 'latency_mode')" class="fh">{{ FH('guardrails', 'latency_mode') }}</p>
             </div>
             <div class="form-row" v-if="form.latency_mode === 'timed'">
-              <label>latency timeout_ms</label>
+              <label>{{ FL('guardrails', 'latency_timeout_ms') }}</label>
               <input v-model="form.latency_timeout_ms" type="number" min="100" max="5000" />
+              <p v-if="FH('guardrails', 'latency_timeout_ms')" class="fh">{{ FH('guardrails', 'latency_timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- aliyun_text_moderation -->
           <template v-else-if="form.kind === 'aliyun_text_moderation'">
             <div class="form-row">
-              <label>access_key_id *</label>
+              <label>{{ FL('guardrails', 'access_key_id') }} *</label>
               <input v-model="form.access_key_id" />
+              <p v-if="FH('guardrails', 'access_key_id')" class="fh">{{ FH('guardrails', 'access_key_id') }}</p>
             </div>
             <div class="form-row">
-              <label>access_key_secret *</label>
+              <label>{{ FL('guardrails', 'access_key_secret') }} *</label>
               <input v-model="form.access_key_secret" type="password" />
+              <p v-if="FH('guardrails', 'access_key_secret')" class="fh">{{ FH('guardrails', 'access_key_secret') }}</p>
             </div>
             <div class="form-row">
-              <label>region *</label>
+              <label>{{ FL('guardrails', 'region') }} *</label>
               <input v-model="form.region" placeholder="cn-shanghai" />
+              <p v-if="FH('guardrails', 'region')" class="fh">{{ FH('guardrails', 'region') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint</label>
+              <label>{{ FL('guardrails', 'endpoint') }}</label>
               <input v-model="form.endpoint" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>risk_level_threshold</label>
+              <label>{{ FL('guardrails', 'risk_level_threshold') }}</label>
               <select v-model="form.risk_level_threshold">
                 <option value="low">low</option>
                 <option value="medium">medium</option>
                 <option value="high">high</option>
               </select>
+              <p v-if="FH('guardrails', 'risk_level_threshold')" class="fh">{{ FH('guardrails', 'risk_level_threshold') }}</p>
             </div>
             <div class="form-row">
-              <label>stream_processing_mode</label>
+              <label>{{ FL('guardrails', 'stream_processing_mode') }}</label>
               <select v-model="form.stream_processing_mode">
                 <option value="window">window</option>
                 <option value="buffer_full">buffer_full</option>
               </select>
+              <p v-if="FH('guardrails', 'stream_processing_mode')" class="fh">{{ FH('guardrails', 'stream_processing_mode') }}</p>
             </div>
             <div class="form-row">
-              <label>window_size</label>
+              <label>{{ FL('guardrails', 'window_size') }}</label>
               <input v-model="form.window_size" type="number" />
+              <p v-if="FH('guardrails', 'window_size')" class="fh">{{ FH('guardrails', 'window_size') }}</p>
             </div>
             <div class="form-row">
-              <label>window_overlap_size</label>
+              <label>{{ FL('guardrails', 'window_overlap_size') }}</label>
               <input v-model="form.window_overlap_size" type="number" />
+              <p v-if="FH('guardrails', 'window_overlap_size')" class="fh">{{ FH('guardrails', 'window_overlap_size') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <!-- aliyun_ai_guardrail -->
           <template v-else-if="form.kind === 'aliyun_ai_guardrail'">
             <div class="form-row">
-              <label>access_key_id *</label>
+              <label>{{ FL('guardrails', 'access_key_id') }} *</label>
               <input v-model="form.access_key_id" />
+              <p v-if="FH('guardrails', 'access_key_id')" class="fh">{{ FH('guardrails', 'access_key_id') }}</p>
             </div>
             <div class="form-row">
-              <label>access_key_secret *</label>
+              <label>{{ FL('guardrails', 'access_key_secret') }} *</label>
               <input v-model="form.access_key_secret" type="password" />
+              <p v-if="FH('guardrails', 'access_key_secret')" class="fh">{{ FH('guardrails', 'access_key_secret') }}</p>
             </div>
             <div class="form-row">
-              <label>region *</label>
+              <label>{{ FL('guardrails', 'region') }} *</label>
               <input v-model="form.region" placeholder="cn-shanghai" />
+              <p v-if="FH('guardrails', 'region')" class="fh">{{ FH('guardrails', 'region') }}</p>
             </div>
             <div class="form-row">
-              <label>endpoint</label>
+              <label>{{ FL('guardrails', 'endpoint') }}</label>
               <input v-model="form.endpoint" />
+              <p v-if="FH('guardrails', 'endpoint')" class="fh">{{ FH('guardrails', 'endpoint') }}</p>
             </div>
             <div class="form-row">
-              <label>service_level</label>
+              <label>{{ FL('guardrails', 'service_level') }}</label>
               <select v-model="form.service_level">
                 <option value="pro">pro</option>
                 <option value="basic">basic</option>
               </select>
+              <p v-if="FH('guardrails', 'service_level')" class="fh">{{ FH('guardrails', 'service_level') }}</p>
             </div>
             <div class="form-row">
-              <label>stream_processing_mode</label>
+              <label>{{ FL('guardrails', 'stream_processing_mode') }}</label>
               <select v-model="form.stream_processing_mode">
                 <option value="window">window</option>
                 <option value="buffer_full">buffer_full</option>
               </select>
+              <p v-if="FH('guardrails', 'stream_processing_mode')" class="fh">{{ FH('guardrails', 'stream_processing_mode') }}</p>
             </div>
             <div class="form-row">
-              <label>window_size</label>
+              <label>{{ FL('guardrails', 'window_size') }}</label>
               <input v-model="form.window_size" type="number" />
+              <p v-if="FH('guardrails', 'window_size')" class="fh">{{ FH('guardrails', 'window_size') }}</p>
             </div>
             <div class="form-row">
-              <label>window_overlap_size</label>
+              <label>{{ FL('guardrails', 'window_overlap_size') }}</label>
               <input v-model="form.window_overlap_size" type="number" />
+              <p v-if="FH('guardrails', 'window_overlap_size')" class="fh">{{ FH('guardrails', 'window_overlap_size') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grMaxBufferBytes') }}</label>
+              <label>{{ FL('guardrails', 'max_buffer_bytes') }}</label>
               <input v-model="form.max_buffer_bytes" type="number" />
+              <p v-if="FH('guardrails', 'max_buffer_bytes')" class="fh">{{ FH('guardrails', 'max_buffer_bytes') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grBufferExceeded') }}</label>
+              <label>{{ FL('guardrails', 'buffer_exceeded') }}</label>
               <select v-model="form.on_buffer_exceeded">
                 <option value="fail_closed">fail_closed</option>
                 <option value="fail_open">fail_open</option>
               </select>
+              <p v-if="FH('guardrails', 'buffer_exceeded')" class="fh">{{ FH('guardrails', 'buffer_exceeded') }}</p>
             </div>
             <div class="form-row">
-              <label>timeout_ms</label>
+              <label>{{ FL('guardrails', 'timeout_ms') }}</label>
               <input v-model="form.timeout_ms" type="number" />
+              <p v-if="FH('guardrails', 'timeout_ms')" class="fh">{{ FH('guardrails', 'timeout_ms') }}</p>
             </div>
             <div class="form-row">
-              <label>{{ t('policies.grOutputFailOpen') }}</label>
+              <label>{{ FL('guardrails', 'output_fail_open') }}</label>
               <label style="justify-self: start"><input type="checkbox" v-model="form.output_fail_open" /></label>
+              <p v-if="FH('guardrails', 'output_fail_open')" class="fh">{{ FH('guardrails', 'output_fail_open') }}</p>
             </div>
           </template>
 
           <div class="form-row">
-            <label>{{ t('policies.grEnabled') }}</label>
+            <label>{{ FL('guardrails', 'enabled') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.enabled" /></label>
+            <p v-if="FH('guardrails', 'enabled')" class="fh">{{ FH('guardrails', 'enabled') }}</p>
           </div>
           <div class="form-row">
-            <label>{{ t('policies.grFailOpen') }}</label>
+            <label>{{ FL('guardrails', 'fail_open') }}</label>
             <label style="justify-self: start"><input type="checkbox" v-model="form.fail_open" /></label>
+            <p v-if="FH('guardrails', 'fail_open')" class="fh">{{ FH('guardrails', 'fail_open') }}</p>
           </div>
         </template>
       </template>
@@ -1401,3 +1537,21 @@ onMounted(load);
     </Modal>
   </div>
 </template>
+
+<style scoped>
+/* The label column holds Chinese field names and the help sits under the input
+   spanning both columns: a 40-character sentence inside the label column would
+   wrap to four lines and bury the input. The rows belong to this component's
+   template, so the scoped selector reaches into the modal. */
+.modal .form-row {
+  grid-template-columns: 200px 1fr;
+}
+
+.modal .form-row > .fh {
+  grid-column: 2;
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+</style>

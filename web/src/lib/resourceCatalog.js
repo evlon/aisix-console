@@ -252,6 +252,40 @@ export const FORM_FIELDS = {
     'anonymousServers', 'anonymousAggregateEntry',
   ],
   claim_mappings: ['name', 'jwt_provider', 'priority', 'match', 'resolveApiKey', 'enabled'],
+
+  // The kinds maintained on the Policies page. Listed here in full, including the
+  // fields whose labels that page used to keep in its own `policies.*` keys —
+  // otherwise this table would describe only part of what the form renders, and
+  // the mirror test in web/test/resourceCatalog.test.js would pass while a label
+  // sat unchecked.
+  rate_limit_policies: [
+    'name', 'scope', 'scope_ref', 'window', 'max_requests',
+    'action', 'conditions', 'group_by', 'limits', 'schedules',
+  ],
+  cache_policies: ['name', 'enabled', 'backend', 'ttl', 'applies_to', 'scope', 'semantic'],
+  guardrails: [
+    // keyword / pii
+    'script', 'max_buffer_bytes',
+    // openai_moderation / lakera / azure
+    'api_key', 'endpoint', 'model', 'project_id',
+    // presidio
+    'analyzer_url', 'anonymizer_url', 'operator', 'language', 'score_threshold',
+    // azure text moderation
+    'categories', 'severity_threshold', 'output_type', 'stream_processing_mode',
+    'text_source', 'halt_on_blocklist_hit', 'window_size', 'window_overlap_size',
+    'category_thresholds', 'blocklist_names', 'severity_threshold_by_category',
+    // bedrock / aliyun
+    'access_key_id', 'access_key_secret', 'secret_access_key', 'region',
+    'guardrail_id', 'guardrail_version', 'latency_mode', 'latency_timeout_ms',
+    'risk_level_threshold', 'service_level',
+    // shared by most providers
+    'timeout_ms',
+    // rule shape, shared by every provider
+    'name', 'kind', 'hook_point', 'enforcement_mode', 'direction', 'patterns', 'enabled',
+    'fail_open', 'output_fail_open', 'buffer_exceeded', 'input_messages',
+    // pii / presidio
+    'default_action', 'detectors', 'custom_patterns', 'entities',
+  ],
 };
 
 // The label text as it appears in the template, for the keys that would make a

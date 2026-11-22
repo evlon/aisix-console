@@ -343,19 +343,50 @@ test('every field an inline form renders has a label in both locales', () => {
   assert.deepEqual(missing, [], `fields with no label:\n${missing.join('\n')}`);
 });
 
+test('a view that calls FL()/FH() defines them', () => {
+  // The template resolves these at RUNTIME from the setup scope, so a view that
+  // uses them without defining them builds fine and then throws
+  // "e.FL is not a function" the first time it renders — the modal simply never
+  // appears. That happened on the Policies page: the labels were converted and
+  // the helpers were not. Nothing else in this suite can see it, because it is
+  // about the file's own bindings rather than about the copy.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const problems = [];
+  for (const file of ['../src/views/Resources.vue', '../src/views/Policies.vue']) {
+    const src = readFileSync(path.join(here, file), 'utf8');
+    for (const helper of ['FL', 'FH']) {
+      const used = src.includes(`${helper}(`);
+      const defined = new RegExp(`const ${helper} =`).test(src);
+      if (used && !defined) problems.push(`${file} calls ${helper}() but never defines it`);
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
+});
+
+test('normalise a real view file so the check above is not vacuous', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(path.join(here, '../src/views/Resources.vue'), 'utf8');
+  assert.ok(src.includes('FL(') && /const FL =/.test(src), 'Resources.vue should both use and define FL');
+});
+
 test('the form template and FORM_FIELDS describe the same fields', () => {
   // The mirror check. The test above proves the structure has copy; this one
   // proves the page actually asks for that copy — a label the template renders
   // but the structure omits is never checked for translation, and one the
   // structure lists but the template dropped is dead weight.
+  //
+  // Both pages: the resource catalogue's own forms, and the Policies page, which
+  // owns three kinds and renders their fields from the same structure.
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(path.join(here, '../src/views/Resources.vue'), 'utf8');
   const inTemplate = new Map();
-  // Kind keys contain digits (`a2a_agents`), hence [a-z0-9_].
-  for (const m of src.matchAll(/FL\(\s*'([a-z][a-z0-9_]*)'\s*,\s*'([^']+)'\s*\)/g)) {
-    const [, kind, field] = m;
-    if (!inTemplate.has(kind)) inTemplate.set(kind, new Set());
-    inTemplate.get(kind).add(field);
+  for (const file of ['../src/views/Resources.vue', '../src/views/Policies.vue']) {
+    const src = readFileSync(path.join(here, file), 'utf8');
+    // Kind keys contain digits (`a2a_agents`), hence [a-z0-9_].
+    for (const m of src.matchAll(/FL\(\s*'([a-z][a-z0-9_]*)'\s*,\s*'([^']+)'\s*\)/g)) {
+      const [, kind, field] = m;
+      if (!inTemplate.has(kind)) inTemplate.set(kind, new Set());
+      inTemplate.get(kind).add(field);
+    }
   }
   assert.ok(inTemplate.size > 0, 'no FL() calls found — did the labels get reverted to raw keys?');
 
@@ -363,22 +394,28 @@ test('the form template and FORM_FIELDS describe the same fields', () => {
   for (const [kind, fields] of Object.entries(FORM_FIELDS)) {
     const seen = inTemplate.get(kind) ?? new Set();
     for (const field of fields) {
-      if (!seen.has(field)) problems.push(`FORM_FIELDS lists ${kind}.${field} but the template does not render it`);
+      if (!seen.has(field)) problems.push(`FORM_FIELDS lists ${kind}.${field} but no template renders it`);
     }
     for (const field of seen) {
-      if (!fields.includes(field)) problems.push(`the template renders ${kind}.${field} but FORM_FIELDS omits it`);
+      if (!fields.includes(field)) problems.push(`a template renders ${kind}.${field} but FORM_FIELDS omits it`);
     }
   }
   for (const kind of inTemplate.keys()) {
-    if (!FORM_FIELDS[kind]) problems.push(`the template renders fields for unknown kind ${kind}`);
+    if (!FORM_FIELDS[kind]) problems.push(`a template renders fields for unknown kind ${kind}`);
   }
   assert.deepEqual(problems, [], problems.join('\n'));
 });
 
 test('no raw configuration key is left as a form label', () => {
-  // The regression guard for this whole change: `<label>auth_type</label>`.
+  // The regression guard for this whole change: `<label>auth_type</label>`, and
+  // on the Policies page the vendor fields (`access_key_id`, `window_size`, …).
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const src = readFileSync(path.join(here, '../src/views/Resources.vue'), 'utf8');
-  const raw = [...src.matchAll(/<label>\s*([a-z][a-z0-9_]*(?:\.[a-z_]+)*)\s*\*?\s*<\/label>/g)].map((m) => m[1]);
-  assert.deepEqual(raw, [], `labels still showing the configuration key: ${raw.join(', ')}`);
+  const problems = [];
+  for (const file of ['../src/views/Resources.vue', '../src/views/Policies.vue']) {
+    const src = readFileSync(path.join(here, file), 'utf8');
+    for (const m of src.matchAll(/<label>\s*([a-z][a-z0-9_]*(?:[\s.][a-z_]+)*)\s*\*?\s*<\/label>/g)) {
+      problems.push(`${file}: ${m[1]}`);
+    }
+  }
+  assert.deepEqual(problems, [], `labels still showing the configuration key:\n${problems.join('\n')}`);
 });
