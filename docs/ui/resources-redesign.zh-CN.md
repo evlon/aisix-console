@@ -296,29 +296,40 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 2. 目录页给一次性的图例（§5.1 第 4 项）；
 3. **把静态可判定的静默失效变成运行期提示**——见 §7.1。
 
-### 7.1 建议：加一个「生效自检」
+### 7.1 已实现：生效自检
 
-控制台手上**已经有整份 `resources.yaml`**，因此下列静默失效全都可以在本地算出来，
-不需要网关配合、不需要新接口。这是本次设计里我最推荐做的一件事：
-它把「静默不生效」从一句文档说明，变成界面上的一条警告。
+控制台手上**已经有整份 `resources.yaml`**，所以下列静默失效全都可以在本地算出来，
+不需要网关配合、不需要网关侧新接口。它把「静默不生效」从一句文档说明，变成界面上的一条警告。
 
-| 检查 | 判定依据 | 提示 |
-|---|---|---|
-| 护栏没有附件 | `guardrails[].enabled == true` 且没有任何 `guardrail_attachments[].guardrail_id` 指向其 id | 「这条护栏不会检查任何流量」 |
-| 附件指向不存在的护栏 | `guardrail_attachments[].guardrail_id` 不在 `guardrails[].id` 里 | 「引用的护栏不存在，该行会被静默跳过」 |
-| 附件缺 priority | 字段缺失 | 「priority 必填，漏填会让整行被拒」 |
-| 文件模式下有预算 | 部署形态为文件模式且 `budgets[]` 非空 | 「预算在文件模式下不生效」 |
-| 有 MCP 服务器但没有访问策略 | `mcp_servers[]` 非空且 `mcp_policies[]` 与各 key 的 `mcp_access` 都为空 | 「MCP 访问默认全关，当前没有任何密钥能调用工具」 |
-| MCP 策略用空 allow | `mcp_policies[].allow` 是空数组 | 「空 allow 等于禁止该层全部工具」 |
-| 缓存 applies_to 值不合法 | 值不在 `all` / `model:<名>` / `api_key:<id>` 之内 | 「这个值会被解析成「整个环境」，作用域被放大」 |
-| 限流策略两种形式混用 | 同时出现 `scope/scope_ref/window` 与 `limits` | 「两种形式只能选一种，混用整行会被拒」 |
-| 限流出现未知字段 | 出现 `tph` / `tps` | 「没有每小时/每秒令牌字段，该字段会被忽略」 |
-| 团队/成员没有 key 指向 | `teams[].id` 不在任何 `api_keys[].team_id` 里（成员同理） | 「没有任何密钥属于这个团队，团队级限流/预算对它不适用」 |
-| claim 映射的提供方不存在 | `claim_mappings[].jwt_provider` 不在 `oidc_providers[].name` 里 | 「这条映射永不会被评估」 |
-| 计费价目没有模型使用 | `pricing[].key` 不在任何 `models[].pricing_key` 里 | 「没有模型使用这条价目」 |
+实现：`server/src/effectChecks.js`（纯函数，14 条）+ `GET /api/resources/effect-checks`。
+**检查项返回的是 code 与参数，不是句子**——控制台是双语的，且测试该断言行为而不是措辞；
+文案在 `resourceCatalog.check.*`（中英各 14 条）。
 
-呈现方式：资源目录页的反馈条里加一个「生效自检」区块，按资源分组，
-**默认折叠、有命中才展开**。不做成阻断——它是提示，不是校验器。
+| # | code | 判定 | 为什么它值得提示 |
+|---|---|---|---|
+| 1 | `guardrailNoAttachment` | `enabled` 的护栏没有被任何附件引用 | 规则不检查任何流量——最常见的「配了没用」 |
+| 2 | `attachmentDanglingGuardrail` | 附件的 `guardrail_id` 不在 `guardrails[].id` 里 | 网关静默跳过，只打一条 warn |
+| 3 | `attachmentNoPriority` | 附件缺 `priority` | 必填无默认值，整行会被丢弃 |
+| 4 | `providerKeyNoApiBase` | 无 `api_base` 且 provider 不是 openai（或空 provider + adapter openai） | 只有 openai 有内置默认地址，其余请求 400 |
+| 5 | `budgetInFileMode` | `budgets` 非空 | 文件模式下预算不执行：耗尽标记由控制面写 |
+| 6 | `mcpDefaultDeny` | 有 MCP 服务器，但无环境策略、无团队策略、无密钥授权 | MCP 访问默认「全关」，直觉相反 |
+| 7 | `mcpPolicyEmptyAllow` | 策略的 `allow`（或 `allow_ids`）是空数组 | 等于禁止该层全部访问，不是「不限制」 |
+| 8 | `cacheAppliesToUnknown` | `applies_to` 非空且不匹配 `all` / `model:` / `api_key:` | 网关当成「全部」，作用域被静默放大 |
+| 9 | `rateLimitMixedForms` | 同时出现经典字段与条件字段 | 整行被拒，不是部分生效 |
+| 10 | `rateLimitUnknownField` | 出现 `tph` / `tps` 等不存在的字段 | 没有每小时/每秒令牌限制，字段被忽略 |
+| 11 | `teamNoKey` | 团队 `id` 不被任何 `api_keys[].team_id` 引用 | 指标无名、团队级限流与预算匹配不到请求 |
+| 12 | `memberNoKey` | 成员 `id` 不被任何 `api_keys[].user_id` 引用 | 同上，作用域是成员 |
+| 13 | `claimMappingProviderMissing` | `jwt_provider` 不在 `oidc_providers[].name` 里 | 该映射永不被评估，token 一律 401 |
+| 14 | `pricingUnused` | 价目 `key` 不被任何 `models[].pricing_key` 引用 | 死配置；反向错误（模型无价）更难发现 |
+
+呈现方式：反馈条里的「生效自检」区块，**默认折叠、有命中才展开**，带一句「以下不是错误，
+而是『配置合法但不会生效』的提示」。不做成阻断——它是提示，不是校验器。
+
+两条测试护栏，防止这份清单和文案将来各自漂移：
+- `server/test/effectChecks.test.js`（23 条）断言每个 code 都可达、没有未声明的 code 被发出、
+  **健康配置不产生任何命中**（会误报的提示比没有提示更糟），以及每条发出的参数与 `CHECK_PARAMS` 契约一致；
+- `web/test/resourceCatalog.test.js` 断言文案与 `CHECK_CODES` **双向**一致，
+  且每条文案用到的占位符与 `CHECK_PARAMS` 完全相同——否则用户会看到字面量 `{n}`。
 
 ---
 
@@ -395,31 +406,34 @@ guardrail_attachments   b71d0e55-…       semantic validation failed: priority 
 
 ## 10. 实施状态
 
-**P0（内容与结构）与 P1（失败反馈）已实现并验证。**
+**P0（内容与结构）、P1（失败反馈）与 P2（生效自检）已实现并验证。**
 
 | 项 | 证据 |
 |---|---|
 | 结构 | 新增 `web/src/lib/resourceCatalog.js`：4 组 / 21 种、归属页、列定义、引用关系、失败模式 |
-| 文案 | 新增 `resource-catalog.zh-CN.js` + `resource-catalog.en.js`，两份键集**完全一致**（289 键 / 各语言） |
+| 文案 | 新增 `resource-catalog.zh-CN.js` + `resource-catalog.en.js`，两份键集**完全一致**（各 305 键） |
 | 组件 | 新增 `ResourceCard.vue`、`ResourceFacts.vue`、`GatewayFeedback.vue` |
 | 视图 | `Resources.vue` 改为「目录 → 详情」两级；旧的 15 个按钮行、`resources.hint`、`colLabel` 的英文字段名兜底全部删除 |
 | 反馈条 | 目录页与详情页都接入；被拒行的「资源类型」列显示翻译后的资源名 |
+| 生效自检 | 新增 `server/src/effectChecks.js`（14 条）+ `GET /api/resources/effect-checks`；每次保存后自动刷新 |
 | 修掉的真缺陷 | `Dashboard.vue` 里「被拒绝的资源」表头写成「上游密钥」——抽取共用组件后由构造消除 |
-| 测试 | `web/test/resourceCatalog.test.js`（10 条新守卫）+ `i18n.test.js` 扩展；**web 32 项、server 59 项全通过** |
+| 测试 | 新增 `server/test/effectChecks.test.js`(23) 与 `web/test/resourceCatalog.test.js`(12)；**server 83 项、web 34 项全通过** |
 | 构建 | `npx vite build` 通过 |
 
-新增的守卫测试专门盯住本次要修的那类漂移：某资源没有文案、某列没有标签、某个失败模式没有说明——
-这三种都会让页面「看起来正常但实际上是空的或英文的」，而正是这次改版的起因。
+新增的守卫测试专门盯住本次要修的那类漂移：某资源没有文案、某列没有标签、某个失败模式没有说明、
+某个检查项没有翻译、文案占位符与服务端参数不一致——这些都会让页面「看起来正常但实际上是空的、
+英文的或显示 `{n}` 的」，而正是这次改版的起因。
 
 **渲染验证**（不是「我认为它会显示对」）：用一份一次性配置在本机起了真实控制台 + 一个网关桩，
 用浏览器实际加载并截图 —— `shots/10-real-catalog.png`（目录，真实条目数 13 种 / 18 条）、
-`shots/11-real-detail.png`（护栏附件详情，六问齐备）、`shots/12-real-rejected.png`（网关拒绝 2 行 + 部分兼容 1 行）。
+`shots/11-real-detail.png`（护栏附件详情，六问齐备）、`shots/12-real-rejected.png`（网关拒绝 2 行 + 部分兼容 1 行）、
+`shots/13-real-selfcheck.png`（生效自检 7 条命中，带参数插值）。
 
 **渲染中发现并修掉的两个自身缺陷**：
 1. 目录页多了一个标题 —— `App.vue` 已按路由渲染页面标题，我又写了一个 `h1`，重复；已去掉自己的标题，详情页的资源名降为二级标题。
 2. **网关不可达时反馈条仍宣称「本次加载全部通过」** —— 判断条件写成了 `!config`，而状态接口在网关掉线时返回的是 `{reachable:false}` 对象、不是 null。这正是本设计要消灭的「假安心」，已改为按「有没有 state 字段」判断，并在无裁决时显示「网关不可达，无法确认配置是否被加载」。
 
-**P2（生效自检）与 P3（表单补齐、策略页复用）尚未开始**，按 §8 的计划推进。
+**P3（表单补齐、策略页复用）尚未开始**，按 §8 的计划推进。
 
 ---
 

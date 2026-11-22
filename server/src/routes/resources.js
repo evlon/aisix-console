@@ -22,6 +22,7 @@ import {
   FORMAT_VERSION_V2,
 } from '../resources.js';
 import * as secrets from '../secrets.js';
+import { runEffectChecks } from '../effectChecks.js';
 
 export function resourcesRouter(ctx) {
   const router = Router();
@@ -108,6 +109,19 @@ export function resourcesRouter(ctx) {
       fingerprint: fingerprint(ctx.cfg.resourcesFile),
       eligible: true,
     });
+  });
+
+  // Effect self-check: the silent failures that are decidable from the file
+  // alone. Hints only — nothing here blocks a save.
+  //
+  // MUST stay above the catch-all `/:kind` route below, or this path is read as
+  // a resource kind named "effect-checks".
+  router.get('/effect-checks', (_req, res) => {
+    const r = loadFile(ctx.cfg.resourcesFile);
+    if (!r.ok) {
+      return res.json({ ok: false, exists: r.exists, error: r.error || null, checks: [] });
+    }
+    res.json({ ok: true, checks: runEffectChecks(r.doc) });
   });
 
   // Migrate the file from format v1 to v2 (the format aisix >= 1.11 requires).

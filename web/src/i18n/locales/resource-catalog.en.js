@@ -112,6 +112,39 @@ export default {
       },
     },
 
+    // ── the effect self-check (server/src/effectChecks.js) ──
+    // Hints, not errors: "this is valid and will do nothing". The codes are the
+    // server's; web/test/resourceCatalog.test.js asserts this block and the
+    // server's CHECK_CODES agree in both directions.
+    checkIntro: 'These are not errors but "valid configuration that will do nothing" — handle them as you see fit:',
+    check: {
+      guardrailNoAttachment:
+        '"{name}" has no attachment — it inspects no traffic at all. The rule is the definition; its scope comes entirely from attachments.',
+      attachmentDanglingGuardrail: 'It references guardrail {name}, which does not exist; the gateway skips the row silently.',
+      attachmentNoPriority: '"{name}" has no priority, which is required, so the gateway drops the row.',
+      providerKeyNoApiBase:
+        '"{name}" has no api_base and its provider is not openai (no built-in default address), so models referencing it answer 400.',
+      budgetInFileMode:
+        'This file has {n} budget rows. They are not enforced in file mode: the exhausted marker is written by the control plane at runtime, and a gateway loading this file has nothing to write it.',
+      mcpDefaultDeny:
+        'There are {n} MCP servers but no environment policy, no team policy and no per-key grant — MCP access defaults to closed, so no key can call any of these tools.',
+      mcpPolicyEmptyAllow:
+        'The {scope}-scoped allow list is empty, which forbids all MCP access at that layer (to only remove a few tools you must still write allow: ["*"]).',
+      cacheAppliesToUnknown:
+        '"{policy}" has applies_to "{value}", which the gateway does not recognise and reads as "all" — the scope widens from the one model you meant to the whole environment.',
+      rateLimitMixedForms:
+        '"{name}" uses both the classic form (scope/window) and the condition form (limits); the gateway rejects the whole row rather than applying part of it.',
+      rateLimitUnknownField:
+        '"{name}" sets {fields}, which do not exist — there is no per-hour or per-second token limit, so those fields are ignored and the policy applies whatever is left.',
+      teamNoKey:
+        '"{name}" has no key pointing at it (team_id): its name never appears in metrics, and team-scoped rate limits and budgets written for it match no request.',
+      memberNoKey:
+        '"{name}" has no key pointing at it (user_id): member-scoped rate limits and budgets match no request.',
+      claimMappingProviderMissing:
+        '"{name}" names a provider that does not exist, so the mapping is never evaluated and tokens from that identity always end up 401.',
+      pricingUnused: '"{key}" is not referenced by any model\'s pricing_key, so it has no effect.',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {

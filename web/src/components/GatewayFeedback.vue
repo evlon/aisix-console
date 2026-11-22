@@ -15,7 +15,8 @@ const props = defineProps({
   config: { type: Object, default: null },
   // Total rows in the local file, so the healthy state can say what was loaded.
   rowCount: { type: Number, default: null },
-  // Findings from the effect self-check (P2). Empty means none.
+  // Findings from the effect self-check: [{ kind, code, params }]. The copy is
+  // ours, keyed by code; the server never sends prose.
   checks: { type: Array, default: () => [] },
 });
 
@@ -55,6 +56,15 @@ const kindLabel = (kind) => {
   if (!kind) return '—';
   const key = `resourceCatalog.kind.${kind}.label`;
   return te(key) ? t(key) : kind;
+};
+
+// The server sends a code plus its parameters; the sentence is ours. A code with
+// no copy yet falls back to the code rather than rendering a dotted key path or
+// an empty row — the web suite asserts the two halves agree in both directions,
+// so this branch should be unreachable, but silence would be the worse failure.
+const checkText = (c) => {
+  const key = `resourceCatalog.check.${c.code}`;
+  return te(key) ? t(key, c.params ?? {}) : c.code;
 };
 </script>
 
@@ -117,9 +127,10 @@ const kindLabel = (kind) => {
 
     <details v-if="checks.length" class="checks">
       <summary>{{ t('dashboard.effectChecks') }} · {{ checks.length }}</summary>
+      <p class="muted note">{{ t('resourceCatalog.checkIntro') }}</p>
       <div v-for="(c, i) in checks" :key="i" class="check">
         <span class="badge plain">{{ kindLabel(c.kind) }}</span>
-        <span>{{ c.message }}</span>
+        <span>{{ checkText(c) }}</span>
       </div>
     </details>
   </div>

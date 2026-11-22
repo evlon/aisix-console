@@ -26,6 +26,10 @@ import {
   MIS_MODES,
   OWN_PAGE_NAV,
 } from '../src/lib/resourceCatalog.js';
+// Cross-package on purpose: the effect self-check is server-side and its codes
+// are what the UI has to translate, so the two halves must be asserted
+// together or a new check ships with no copy.
+import { CHECK_CODES, CHECK_PARAMS } from '../../server/src/effectChecks.js';
 
 const locales = { 'zh-CN': zh, en };
 
@@ -195,4 +199,36 @@ test('the kind list order matches the group list order', () => {
     seen.add(k.group);
   }
   assert.equal(seen.size, GROUPS.length);
+});
+
+test('every effect check has copy, and no copy is orphaned', () => {
+  // Both directions: a server-side check with no translation would render a raw
+  // dotted key, and a translation with no check is dead weight that hides a
+  // rename on the server.
+  const codes = Object.keys(zh.resourceCatalog.check ?? {}).sort();
+  assert.deepEqual(codes, [...CHECK_CODES].sort(), 'resourceCatalog.check and CHECK_CODES must agree');
+  for (const [name, loc] of Object.entries(locales)) {
+    assert.ok(filled(resolve(loc, 'resourceCatalog.checkIntro')), `${name}: resourceCatalog.checkIntro`);
+    for (const code of CHECK_CODES) {
+      assert.ok(filled(resolve(loc, `resourceCatalog.check.${code}`)), `${name}: check.${code}`);
+    }
+  }
+});
+
+test('the placeholders in each check translation match the params the server sends', () => {
+  // The copy is interpolated on the client, so a translation using {count} where
+  // the server sends {n} shows the user a literal "{count}".
+  const problems = [];
+  for (const code of CHECK_CODES) {
+    const declared = [...(CHECK_PARAMS[code] ?? [])].sort();
+    for (const [name, loc] of Object.entries(locales)) {
+      const text = resolve(loc, `resourceCatalog.check.${code}`);
+      const used = [...String(text).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      const unique = [...new Set(used)];
+      if (JSON.stringify(unique) !== JSON.stringify(declared)) {
+        problems.push(`${name}: ${code} uses ${JSON.stringify(unique)}, contract says ${JSON.stringify(declared)}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, [], problems.join('\n'));
 });

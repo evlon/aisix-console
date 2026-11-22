@@ -112,6 +112,34 @@ export default {
       },
     },
 
+    // ── the effect self-check (server/src/effectChecks.js) ──
+    // These are hints, not errors: they say "this is valid but will do nothing".
+    // The codes are the server's; web/test/resourceCatalog.test.js asserts this
+    // block and the server's CHECK_CODES agree in both directions.
+    checkIntro: '以下不是错误，而是「配置合法但不会生效」的提示，按需处理即可：',
+    check: {
+      guardrailNoAttachment: '「{name}」没有任何附件 —— 它不会检查任何流量。规则是定义，作用域完全来自附件。',
+      attachmentDanglingGuardrail: '引用的护栏 {name} 不存在，网关会静默跳过这一行。',
+      attachmentNoPriority: '「{name}」没填 priority，而它是必填项，这一行会被网关丢弃。',
+      providerKeyNoApiBase:
+        '「{name}」没有 api_base，且 provider 不是 openai（没有内置默认地址），引用它的模型会返回 400。',
+      budgetInFileMode:
+        '本文件里有 {n} 条预算。文件模式下它们不会被执行：耗尽标记由控制面在运行时写入，加载这份文件的网关没有东西去写它。',
+      mcpDefaultDeny:
+        '有 {n} 个 MCP 服务器，但没有任何环境策略、团队策略或密钥授权 —— MCP 访问默认是「全关」，当前没有任何密钥能调用这些工具。',
+      mcpPolicyEmptyAllow:
+        '{scope} 作用域的 allow 是空名单，等于禁止该层的全部 MCP 访问（想「只减掉几个」必须先写 allow: ["*"]）。',
+      cacheAppliesToUnknown:
+        '「{policy}」的 applies_to 是「{value}」，网关不认识这个值，会当成「全部」—— 作用域从你想收窄的那个模型变成了整个环境。',
+      rateLimitMixedForms: '「{name}」同时用了经典形式（scope/window）和条件形式（limits），网关会整行拒绝，不是部分生效。',
+      rateLimitUnknownField:
+        '「{name}」用了不存在的字段 {fields} —— 没有每小时或每秒的令牌限制，这些字段会被忽略，策略按剩下的字段生效。',
+      teamNoKey: '「{name}」没有任何密钥指向它（team_id）：指标里不会出现它的名字，针对它的限流与预算也匹配不到请求。',
+      memberNoKey: '「{name}」没有任何密钥指向它（user_id）：针对成员的限流与预算匹配不到请求。',
+      claimMappingProviderMissing: '「{name}」指定的提供方不存在，这条映射永远不会被评估，该身份的 token 一律 401。',
+      pricingUnused: '「{key}」没有被任何模型的 pricing_key 引用，它不产生任何效果。',
+    },
+
     // ── the 21 kinds ──
     kind: {
       provider_keys: {

@@ -587,6 +587,7 @@ async function save() {
     if (result.ok) {
       editing.value = null;
       await load();
+      await loadChecks();
     }
   } catch (e) {
     lastResult.value = { ok: false, errors: [{ message: e.message }] };
@@ -614,6 +615,7 @@ async function saveRaw() {
     if (result.ok) {
       editing.value = null;
       await load();
+      await loadChecks();
     }
   } catch (e) {
     lastResult.value = { ok: false, errors: [{ message: e.message }] };
@@ -628,7 +630,10 @@ async function remove(e) {
   try {
     const r = await api.remove(activeKind.value, identity);
     lastResult.value = r;
-    if (r.ok) await load();
+    if (r.ok) {
+      await load();
+      await loadChecks();
+    }
   } catch (err) {
     lastResult.value = { ok: false, errors: [{ message: err.message }] };
   }
@@ -666,7 +671,23 @@ function cell(e, col) {
   return v ?? '—';
 }
 
-onMounted(load);
+// Findings from the server's silent-failure check, refreshed after every save.
+// Hints only: a failure here must not disturb the page, so it degrades to none.
+const checks = ref([]);
+
+async function loadChecks() {
+  try {
+    const r = await api.effectChecks();
+    checks.value = r?.checks ?? [];
+  } catch {
+    checks.value = [];
+  }
+}
+
+onMounted(() => {
+  load();
+  loadChecks();
+});
 </script>
 
 <template>
@@ -683,7 +704,7 @@ onMounted(load);
       </div>
       <p class="muted" style="margin: 6px 0 18px">{{ t('resourceCatalog.intro') }}</p>
 
-      <GatewayFeedback :config="config" :row-count="rowCount" />
+      <GatewayFeedback :config="config" :row-count="rowCount" :checks="checks" />
 
       <div class="guide">
         <span>
@@ -752,7 +773,7 @@ onMounted(load);
         <div v-for="(e, i) in lastResult.errors" :key="i">- {{ e.message }}</div>
       </div>
 
-      <GatewayFeedback :config="config" :row-count="rowCount" />
+      <GatewayFeedback :config="config" :row-count="rowCount" :checks="checks" />
 
       <ResourceFacts :kind="activeKind" :raw-only="!!activeRec.rawOnly" />
 

@@ -66,6 +66,9 @@ export const api = {
   resourcesMeta: () => request('/api/resources/meta'),
   migrateFormatV2: () => request('/api/resources/migrate-format-v2', { method: 'POST' }),
 
+  // Silent-failure hints, decided from the local file (no gateway involved).
+  effectChecks: () => request('/api/resources/effect-checks'),
+
   secrets: () => request('/api/secrets'),
   setSecret: (name, value) => request('/api/secrets', { method: 'POST', body: JSON.stringify({ name, value }) }),
   deleteSecret: (name) => request(`/api/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
