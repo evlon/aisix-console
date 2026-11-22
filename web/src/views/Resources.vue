@@ -55,10 +55,7 @@ const MODE_CLS = { file: 'err', row: 'warn', silent: 'plain' };
 const RAW_SKELETONS = {
   teams: { name: '' },
   users: { name: '' },
-  pricing: { key: '', input_per_1k: 0, output_per_1k: 0 },
   budgets: { scope: 'api_key', scope_ref: '', period: 'day' },
-  budget_policy: { fail_mode: 'sticky', closed_grace_seconds: 60 },
-  usage_accounting: { exclude_estimated_usage: false },
 };
 
 const IDENTITY = {
@@ -181,6 +178,9 @@ function emptyEntry() {
       anonymous_source_cidrs: '', anonymous_servers: '', anonymous_aggregate_entry: false,
     };
   }
+  if (k === 'pricing') return { key: '', input_per_1k: '', output_per_1k: '' };
+  if (k === 'budget_policy') return { fail_mode: 'sticky', closed_grace_seconds: 60 };
+  if (k === 'usage_accounting') return { exclude_estimated_usage: false };
   if (k === 'mcp_policies') {
     // One glob per line, like the API-key form's mcp_access box.
     return { scope: 'env', scope_ref: '', allow_text: '*', deny_text: '', enabled: true };
@@ -242,6 +242,15 @@ function openEdit(e) {
   editing.value = { original: e };
   const f = JSON.parse(JSON.stringify(e));
   const k = activeKind.value;
+  if (k === 'pricing') {
+    f.input_per_1k = e.input_per_1k ?? '';
+    f.output_per_1k = e.output_per_1k ?? '';
+  }
+  if (k === 'budget_policy') {
+    f.fail_mode = e.fail_mode ?? 'sticky';
+    f.closed_grace_seconds = e.closed_grace_seconds ?? 60;
+  }
+  if (k === 'usage_accounting') f.exclude_estimated_usage = !!e.exclude_estimated_usage;
   if (k === 'mcp_policies') {
     f.allow_text = (e.allow ?? []).join('\n');
     f.deny_text = (e.deny ?? []).join('\n');
@@ -331,6 +340,24 @@ function buildEntry() {
   const f = JSON.parse(JSON.stringify(form.value));
   const k = activeKind.value;
 
+  if (k === 'pricing') {
+    // All three are required, and an empty number box must not become 0 — that
+    // would silently price the model at nothing.
+    if (!String(f.key || '').trim()) throw new Error(t('common.required'));
+    const money = (v) => {
+      if (v === '' || v === null || v === undefined || Number.isNaN(Number(v))) throw new Error(t('obs.err.badNumber'));
+      return Number(v);
+    };
+    return { key: f.key, input_per_1k: money(f.input_per_1k), output_per_1k: money(f.output_per_1k) };
+  }
+  if (k === 'budget_policy') {
+    const grace = Number(f.closed_grace_seconds);
+    if (f.closed_grace_seconds === '' || Number.isNaN(grace)) throw new Error(t('obs.err.badNumber'));
+    return { fail_mode: f.fail_mode || 'sticky', closed_grace_seconds: grace };
+  }
+  if (k === 'usage_accounting') {
+    return { exclude_estimated_usage: !!f.exclude_estimated_usage };
+  }
   if (k === 'mcp_policies') {
     const allow = strArr(f.allow_text);
     // An empty allow list is legal but means "forbid everything at this layer".
@@ -610,7 +637,7 @@ const FH = (kind, field) => {
 
 async function save() {
   const k = activeKind.value;
-  if (k !== 'mcp_auth_settings' && k !== 'guardrail_attachments' && k !== 'mcp_policies' && !form.value.name && !form.value.display_name) {
+  if (k !== 'mcp_auth_settings' && k !== 'guardrail_attachments' && k !== 'mcp_policies' && k !== 'budget_policy' && k !== 'usage_accounting' && !form.value.name && !form.value.display_name) {
     lastResult.value = { ok: false, errors: [{ message: t('common.required') }] };
     return;
   }
@@ -1131,6 +1158,57 @@ onMounted(() => {
           <p v-if="mcpPolicyUsesIdForm" class="warn-box" style="margin-top: 8px">
             {{ t('resources.mcpPolicyIdForm') }}
           </p>
+        </template>
+
+        <!-- pricing -->
+        <template v-else-if="activeKind === 'pricing'">
+          <div class="form-row">
+            <label>{{ FL('pricing', 'key') }} *</label>
+            <input v-model="form.key" placeholder="deepseek/deepseek-chat" />
+            <p v-if="FH('pricing', 'key')" class="fh">{{ FH('pricing', 'key') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('pricing', 'input_per_1k') }} *</label>
+            <input v-model="form.input_per_1k" type="number" step="0.000001" />
+            <p v-if="FH('pricing', 'input_per_1k')" class="fh">{{ FH('pricing', 'input_per_1k') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('pricing', 'output_per_1k') }} *</label>
+            <input v-model="form.output_per_1k" type="number" step="0.000001" />
+            <p v-if="FH('pricing', 'output_per_1k')" class="fh">{{ FH('pricing', 'output_per_1k') }}</p>
+          </div>
+        </template>
+
+        <!-- budget policy (one per environment) -->
+        <template v-else-if="activeKind === 'budget_policy'">
+          <div class="form-row">
+            <label>{{ FL('budget_policy', 'fail_mode') }}</label>
+            <select v-model="form.fail_mode">
+              <option value="sticky">sticky（沿用最后一次收到的状态）</option>
+              <option value="closed">closed（宁可拒绝）</option>
+            </select>
+            <p v-if="FH('budget_policy', 'fail_mode')" class="fh">{{ FH('budget_policy', 'fail_mode') }}</p>
+          </div>
+          <div class="form-row">
+            <label>{{ FL('budget_policy', 'closed_grace_seconds') }} *</label>
+            <input v-model="form.closed_grace_seconds" type="number" min="1" />
+            <p v-if="FH('budget_policy', 'closed_grace_seconds')" class="fh">
+              {{ FH('budget_policy', 'closed_grace_seconds') }}
+            </p>
+          </div>
+        </template>
+
+        <!-- usage accounting (one per environment) -->
+        <template v-else-if="activeKind === 'usage_accounting'">
+          <div class="form-row">
+            <label>{{ FL('usage_accounting', 'exclude_estimated_usage') }}</label>
+            <label style="justify-self: start">
+              <input type="checkbox" v-model="form.exclude_estimated_usage" />
+            </label>
+            <p v-if="FH('usage_accounting', 'exclude_estimated_usage')" class="fh">
+              {{ FH('usage_accounting', 'exclude_estimated_usage') }}
+            </p>
+          </div>
         </template>
 
         <!-- collections the form does not model -->

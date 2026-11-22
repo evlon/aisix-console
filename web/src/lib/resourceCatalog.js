@@ -54,10 +54,10 @@ export const KINDS = [
   { key: 'rate_limit_policies', group: 'govern', ownPage: '/policies' },
 
   // ── meter: what it cost and where the usage goes ──
-  { key: 'pricing', group: 'meter', rawOnly: true },
+  { key: 'pricing', group: 'meter' },
   { key: 'budgets', group: 'meter', rawOnly: true },
-  { key: 'budget_policy', group: 'meter', rawOnly: true },
-  { key: 'usage_accounting', group: 'meter', rawOnly: true },
+  { key: 'budget_policy', group: 'meter' },
+  { key: 'usage_accounting', group: 'meter' },
   { key: 'observability_exporters', group: 'meter' },
 ];
 
@@ -257,6 +257,10 @@ export const FORM_FIELDS = {
   // name lists are ignored by the gateway — which is why the form warns instead
   // of silently editing a field nothing reads.
   mcp_policies: ['scope', 'scope_ref', 'allow', 'deny', 'enabled'],
+  // Exactly the properties the schema has: three, two and one.
+  pricing: ['key', 'input_per_1k', 'output_per_1k'],
+  budget_policy: ['fail_mode', 'closed_grace_seconds'],
+  usage_accounting: ['exclude_estimated_usage'],
 
   // The kinds maintained on the Policies page. Listed here in full, including the
   // fields whose labels that page used to keep in its own `policies.*` keys —

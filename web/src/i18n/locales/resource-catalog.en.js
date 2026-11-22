@@ -631,6 +631,11 @@ export default {
       },
       pricing: {
         label: 'Pricing',
+        fieldHelp: {
+          key: "Matched exactly against a model's pricing_key. The convention is \"provider/model\", but the gateway gives no part of it meaning — one character out and it silently falls back to the model's inline cost, or to no price at all.",
+          input_per_1k: 'Price per 1000 input tokens. The currency is the organisation\'s; just the number goes here.',
+          output_per_1k: 'Price per 1000 output tokens.',
+        },
         oneLiner: 'A price list of "how much per 1000 tokens" that models point at with their pricing key.',
         whenNeeded: 'Configure this when prices change more often than model definitions, or when one price is shared by several models.',
         effect: 'Prices resolve on the read path, so changing one takes effect on the next request without rewriting any model document; it feeds least-cost ordering and the cost on usage events.',
@@ -659,6 +664,10 @@ export default {
       },
       budget_policy: {
         label: 'Budget policy',
+        fieldHelp: {
+          fail_mode: 'sticky (default) keeps applying the last exhausted state it received. closed refuses instead once usage delivery has been unhealthy past the grace period — budget-constrained traffic gets 503 rather than being let through.',
+          closed_grace_seconds: 'How long to tolerate in closed mode. It is required in sticky mode too: the schema does not relax it, and 0 is rejected.',
+        },
         oneLiner: 'One per environment: what the gateway does with budget-constrained traffic when usage cannot reach the control plane.',
         whenNeeded: 'When you would rather refuse than risk "stale control-plane counts", set the fail mode to closed.',
         effect: 'closed: after usage delivery keeps failing past the grace period, requests on budget-constrained keys return 503 budget_unverified. sticky (the default) keeps enforcing the last exhausted state it received.',
@@ -673,6 +682,9 @@ export default {
       },
       usage_accounting: {
         label: 'Usage accounting',
+        fieldHelp: {
+          exclude_estimated_usage: 'When on, tokens the gateway estimated itself do not consume token rate-limit budget (tpm/tpd). Request counts and concurrency still count, and usage events still report the estimate.',
+        },
         oneLiner: 'One per environment: whether tokens the gateway estimates itself, when upstream reports no usage, count toward token rate limits.',
         whenNeeded: 'Configure this when upstream returns no usage and the gateway\'s local estimate runs high, so estimated values eat into the token allowance.',
         effect: 'Turned on: requests with estimated usage add no tokens to the token window; request counts and concurrency still count, and usage events still report the estimated value.',

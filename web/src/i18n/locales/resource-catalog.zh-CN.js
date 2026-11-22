@@ -633,6 +633,11 @@ export default {
       },
       pricing: {
         label: '计费价目',
+        fieldHelp: {
+          key: '与模型的 pricing_key 精确匹配。约定写法是「厂商/模型名」，但网关不给任何部分赋予含义 —— 少一个字符就静默回落到模型自己的内联成本，或者变成没有价格。',
+          input_per_1k: '每 1000 个输入 token 的单价。币种由组织决定，这里只填数字。',
+          output_per_1k: '每 1000 个输出 token 的单价。',
+        },
         oneLiner: '一份「每 1000 token 多少钱」的价目表，模型用计费键指向它。',
         whenNeeded: '价格变动比模型定义频繁、或一份价格被多个模型共用时配置。',
         effect: '价格在读路径解析，所以改一条价格下一个请求就生效，不用重写任何模型文档；它影响最低成本排序和用量事件上的成本。',
@@ -661,6 +666,10 @@ export default {
       },
       budget_policy: {
         label: '预算策略',
+        fieldHelp: {
+          fail_mode: 'sticky（默认）：继续沿用最后一次收到的耗尽状态。closed：用量送不到控制面超过宽限期后宁可拒绝 —— 受预算约束的流量会拿到 503，而不是继续放行。',
+          closed_grace_seconds: 'closed 模式下容忍多久。sticky 下也必须填（schema 不做条件放宽，写 0 会被拒）。',
+        },
         oneLiner: '每个环境一份：用量送不到控制面时，网关对受预算约束的流量怎么办。',
         whenNeeded: '担心「控制面计数不新鲜」而宁可拒绝时，把失联行为改成 closed。',
         effect: 'closed：用量投递失败持续超过宽限期后，受预算约束的密钥请求回 503 budget_unverified。sticky（默认）继续执行最后一次收到的耗尽状态。',
@@ -675,6 +684,9 @@ export default {
       },
       usage_accounting: {
         label: '用量记账',
+        fieldHelp: {
+          exclude_estimated_usage: '打开后：网关自己估算出来的 token 不占令牌限流额度（tpm/tpd）。请求数与并发照旧计数，用量事件里也照旧上报估算值。',
+        },
         oneLiner: '每个环境一份：上游没报用量、网关自己估出来的 token 算不算进令牌限流。',
         whenNeeded: '上游不返回用量、网关本地估算偏高，导致令牌额度被估算值挤占时配置。',
         effect: '打开后：估算用量的请求不把任何 token 加进令牌窗口；请求数与并发仍然计数，用量事件里仍然照报估算值。',
