@@ -223,9 +223,24 @@ button.danger:hover {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px;
-  width: min(560px, 92vw);
+  /* Measured before this: 560px on a 1440px screen, while the content ran 1223px
+     tall against a 553px window. Width was the cheap half of that — a wider form
+     wraps less, so it is also shorter. */
+  width: min(920px, 94vw);
   max-height: 86vh;
   overflow: auto;
+}
+
+/* The save button used to sit at the end of a 2.2-screen scroll. Sticky at the
+   bottom of the content box, with enough of its own padding to cover the modal's
+   own 20px padding underneath — otherwise the scrolled content shows through the
+   strip below it. */
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0 24px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
 }
 
 .form-row {
@@ -233,7 +248,7 @@ button.danger:hover {
   grid-template-columns: 160px 1fr;
   gap: 8px 12px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .form-row label {
