@@ -59,6 +59,29 @@ function parseJsonObj(text, label) {
   }
 }
 
+// resolve_addresses is an array of IP LITERALS and nothing else — the gateway's
+// schema rejects anything that does not match ^[0-9A-Fa-f:.]+$, so an object or a
+// "domain:ip" pair is a rejected row, not a clever shorthand. Checked here with the
+// same expression so the operator sees it while typing instead of after a save the
+// gateway refuses.
+//
+// Why the field exists at all: an upstream can require the request to arrive under
+// its domain (Host / TLS SNI), while its name does not resolve from the gateway's
+// network — or must be pinned to one address. Filling this keeps api_base's domain
+// and only changes where the connection goes.
+const IP_LITERAL = /^[0-9A-Fa-f:.]+$/;
+
+function parseIpList(text, label) {
+  const parts = (text ?? '')
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!parts.length) return undefined;
+  const bad = parts.filter((s) => !IP_LITERAL.test(s));
+  if (bad.length) throw new Error(`${label}: 这些不是 IP 地址 → ${bad.join(', ')}`);
+  return parts;
+}
+
 const form = ref(emptyForm());
 
 async function load() {
@@ -92,7 +115,7 @@ function openEdit(e) {
     request_text: e.request ? JSON.stringify(e.request, null, 2) : '',
     response_text: e.response ? JSON.stringify(e.response, null, 2) : '',
     tls_text: e.tls ? JSON.stringify(e.tls, null, 2) : '',
-    resolve_addresses_text: e.resolve_addresses ? JSON.stringify(e.resolve_addresses, null, 2) : '',
+    resolve_addresses_text: Array.isArray(e.resolve_addresses) ? e.resolve_addresses.join('\n') : '',
     strip_headers_text: e.strip_headers ? JSON.stringify(e.strip_headers, null, 2) : '',
     telemetry_tags_text: e.telemetry_tags ? JSON.stringify(e.telemetry_tags, null, 2) : '',
   };
@@ -138,7 +161,7 @@ async function save() {
       if (resp !== undefined) entry.response = resp;
       const tls = parseJsonObj(form.value.tls_text, 'tls');
       if (tls !== undefined) entry.tls = tls;
-      const addrs = parseJsonObj(form.value.resolve_addresses_text, 'resolve_addresses');
+      const addrs = parseIpList(form.value.resolve_addresses_text, '域名解析到哪个 IP');
       if (addrs !== undefined) entry.resolve_addresses = addrs;
       const sh = parseJsonObj(form.value.strip_headers_text, 'strip_headers');
       if (sh !== undefined) entry.strip_headers = sh;
@@ -300,7 +323,12 @@ onMounted(load);
         </div>
         <div class="form-row">
           <label>{{ FL('provider_keys', 'resolve_addresses') }}</label>
-          <textarea v-model="form.resolve_addresses_text" rows="2" style="flex: 1" placeholder='["10.0.0.5"]' />
+          <textarea
+            v-model="form.resolve_addresses_text"
+            rows="2"
+            style="flex: 1"
+            placeholder="10.0.0.5&#10;10.0.0.6"
+          />
           <p v-if="FH('provider_keys', 'resolve_addresses')" class="fh">{{ FH('provider_keys', 'resolve_addresses') }}</p>
         </div>
         <div class="form-row">
