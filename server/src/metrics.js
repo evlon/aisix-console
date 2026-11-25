@@ -14,13 +14,15 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 const METRICS_TIMEOUT_MS = 5000;
 
-// Bookkeeping cadences. Both of the operations below are synchronous and were
-// measured on a production store (1.34M rows, 1.17 GB): the distinct-series count
-// took 99.3 SECONDS and the row count 3.1s. Running them on every scrape (10s)
-// blocked the event loop, so the console answered /api/health in 39-102s and the
-// container was reported unhealthy while never actually failing a request. They
-// exist only to be displayed, so rarely is soon enough.
-const STATS_INTERVAL_MS = 5 * 60 * 1000;
+// Bookkeeping cadences. Both of the operations below are synchronous. Measured on a
+// production store (1.34M rows, 1.17 GB) BEFORE the (metric, labels) index existed:
+// the distinct-series count took 99.3 SECONDS and the row count 3.1s. Running them
+// on every scrape (10s) blocked the event loop, so the console answered
+// /api/health in 39-102s and the container was reported unhealthy while never
+// actually failing a request. With the index the count is 1.1s, but the row count
+// is still a full scan, so these stay on a long cadence — they exist only to be
+// displayed.
+const STATS_INTERVAL_MS = 15 * 60 * 1000;
 const VACUUM_INTERVAL_MS = 60 * 60 * 1000;
 
 // ---- range helpers ----------------------------------------------------------
@@ -128,7 +130,13 @@ export function openDb(dbFile) {
      -- MIN/MAX(ts) for coverage, and the retention prune, both scan by ts
      -- alone; without this they walk every row (hundreds of thousands at a
      -- 24h retention with a few hundred series).
-     CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples (ts);`,
+     CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples (ts);
+     -- The distinct-series counter the status strip shows. Without this index it
+     -- was a full scan plus a temp b-tree: measured 99.3 SECONDS on a 1.34M-row
+     -- production store, blocking the event loop on every refresh. With it, the
+     -- same query is 1.1s (SCAN … USING COVERING INDEX). Creating it costs ~72s
+     -- and ~35% file size once, on a store that size.
+     CREATE INDEX IF NOT EXISTS idx_samples_metric_labels ON samples (metric, labels);`,
   );
   return db;
 }
