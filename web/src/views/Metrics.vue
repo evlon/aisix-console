@@ -189,6 +189,25 @@ const coverageNote = computed(() => {
   return t('metrics.coveragePartial', { from: fmtTs(c.earliestSampleAt) });
 });
 
+// A store whose newest sample is old is the failure that actually happened: the
+// collector had been dead for three days and the page showed zeros with no remark
+// at all, because only `partial` (window older than retention) was ever surfaced.
+// Samples are written once a minute, so five minutes of silence means the
+// collector stopped; it is not a slow period.
+const STALE_AFTER_SECONDS = 300;
+const staleNote = computed(() => {
+  const c = coverage.value;
+  const latest = c?.latestSampleAt;
+  if (!latest) return t('metrics.noSamples');
+  const age = Math.floor(Date.now() / 1000) - latest;
+  if (age <= STALE_AFTER_SECONDS) return null;
+  const mins = Math.floor(age / 60);
+  const ago = mins >= 120
+    ? t('metrics.staleHours', { n: Math.floor(mins / 60) })
+    : t('metrics.staleMinutes', { n: mins });
+  return t('metrics.stale', { ago, at: fmtTs(latest) });
+});
+
 let timer = null;
 function tick() {
   if (!document.hidden) loadAll();
@@ -245,6 +264,7 @@ onBeforeUnmount(stopPolling);
       · {{ t('metrics.retention') }}：{{ overview.retentionHours }}
     </div>
     <div v-if="error" class="error-box">{{ error }}</div>
+    <div v-if="staleNote" class="error-box">{{ staleNote }}</div>
     <div v-if="coverageNote" class="warn-box">{{ coverageNote }}</div>
 
     <div v-if="!hasData && !loading && !error" class="warn-box">{{ t('metrics.noData') }}</div>
