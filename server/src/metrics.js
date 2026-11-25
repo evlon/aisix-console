@@ -442,6 +442,26 @@ function latestInPoints(points, t, startValue) {
   return v == null ? startValue : v;
 }
 
+// Prometheus writes NaN for "no value" and ±Inf for an unbounded measurement — the
+// gateway emits `aisix_ratelimit_remaining_tokens{…} NaN` whenever that limit is
+// not configured. SQLite has no NaN: the driver binds it as NULL, the `value`
+// column is NOT NULL, the INSERT throws — and since one scrape is one transaction,
+// the WHOLE batch rolls back. On a live deployment ONE such series stopped
+// collection for three days while the endpoint, the network and the parser were
+// all healthy.
+//
+// Skipping is the correct reading: NaN is not a measurement of zero, it is "not
+// applicable". Dropping that one sample keeps every real number around it.
+export function finiteSamples(samples) {
+  const kept = [];
+  let skipped = 0;
+  for (const s of samples) {
+    if (Number.isFinite(s.value)) kept.push(s);
+    else skipped += 1;
+  }
+  return { kept, skipped };
+}
+
 // ---- collector --------------------------------------------------------------
 export function createMetricsCollector(cfg) {
   const dbFile = cfg.metricsDb || path.join(PROJECT_ROOT, 'data', 'metrics.db');
@@ -457,6 +477,8 @@ export function createMetricsCollector(cfg) {
     lastScrapeError: null,
     seriesCount: 0,
     dbRows: 0,
+    skippedNonFinite: 0,
+    storedLastScrape: 0,
     retentionHours,
     scrapeIntervalSeconds: intervalSec,
     metricsUrl: metricsBase ? `${metricsBase}/metrics` : null,
@@ -464,6 +486,22 @@ export function createMetricsCollector(cfg) {
 
   let db = null;
   let timer = null;
+  let lastLoggedAt = 0;
+
+  // A failed scrape used to be completely silent: the only surface was
+  // /api/metrics/overview, which needs a login. That is why a collector that had
+  // stopped three days earlier looked exactly like a collector with nothing to
+  // report. Log the first failure, then at most one a minute, so it is visible in
+  // `docker logs` without flooding it at one scrape per 10s.
+  function fail(message) {
+    state.lastScrapeOk = false;
+    state.lastScrapeError = message;
+    const now = Date.now();
+    if (now - lastLoggedAt >= 60_000) {
+      lastLoggedAt = now;
+      console.error(`[metrics] 采集失败：${message}`);
+    }
+  }
 
   function initDb() {
     db = openDb(dbFile);
@@ -473,18 +511,20 @@ export function createMetricsCollector(cfg) {
     if (!db) return;
     const res = await fetchWithTimeout(state.metricsUrl, {}, METRICS_TIMEOUT_MS);
     if (!res.ok) {
-      state.lastScrapeOk = false;
-      state.lastScrapeError = res.error ? `HTTP ${res.status} — ${res.error}` : `HTTP ${res.status}`;
+      fail(res.error ? `HTTP ${res.status} — ${res.error}` : `HTTP ${res.status}`);
       return;
     }
     let samples;
     try {
       samples = parseExposition(res.data);
     } catch (e) {
-      state.lastScrapeOk = false;
-      state.lastScrapeError = `parse: ${e.message}`;
+      fail(`parse: ${e.message}`);
       return;
     }
+    // Non-finite values are dropped BEFORE the transaction, not inside it: a
+    // throw in the middle costs the entire batch, which is how one NaN series
+    // stopped collection completely.
+    const { kept, skipped } = finiteSamples(samples);
     const now = Math.floor(Date.now() / 1000);
     const minute = Math.floor(now / 60) * 60;
     try {
@@ -492,7 +532,7 @@ export function createMetricsCollector(cfg) {
         'INSERT OR REPLACE INTO samples (metric, labels, ts, value) VALUES (?, ?, ?, ?)',
       );
       db.exec('BEGIN');
-      for (const s of samples) {
+      for (const s of kept) {
         insert.run(s.metric, canonicalLabels(s.labels), minute, s.value);
       }
       // prune
@@ -510,6 +550,8 @@ export function createMetricsCollector(cfg) {
       state.lastScrapeOk = true;
       state.lastScrapeError = null;
       state.lastScrapeAt = now;
+      state.skippedNonFinite = skipped;
+      state.storedLastScrape = kept.length;
       state.seriesCount = db
         .prepare('SELECT COUNT(*) AS c FROM (SELECT DISTINCT metric, labels FROM samples)')
         .get().c;
@@ -520,8 +562,7 @@ export function createMetricsCollector(cfg) {
       } catch {
         /* ignore */
       }
-      state.lastScrapeOk = false;
-      state.lastScrapeError = `store: ${e.message}`;
+      fail(`store: ${e.message}`);
     }
   }
 
@@ -542,7 +583,9 @@ export function createMetricsCollector(cfg) {
     try {
       initDb();
     } catch (e) {
-      state.lastScrapeError = `db: ${e.message}`;
+      // Same silence problem as a failed scrape: without this line a collector
+      // that never started is indistinguishable from one with nothing to say.
+      fail(`db: ${e.message}`);
       return;
     }
     scrape();
