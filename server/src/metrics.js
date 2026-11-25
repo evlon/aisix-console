@@ -459,13 +459,18 @@ function latestInPoints(points, t, startValue) {
   return v == null ? startValue : v;
 }
 
-// Prometheus writes NaN for "no value" and ±Inf for an unbounded measurement — the
-// gateway emits `aisix_ratelimit_remaining_tokens{…} NaN` whenever that limit is
-// not configured. SQLite has no NaN: the driver binds it as NULL, the `value`
-// column is NOT NULL, the INSERT throws — and since one scrape is one transaction,
-// the WHOLE batch rolls back. On a live deployment ONE such series stopped
-// collection for three days while the endpoint, the network and the parser were
-// all healthy.
+// Prometheus writes NaN for "no value" and ±Inf for an unbounded measurement, and a
+// NaN series is NOT necessarily "the feature is off". On a live deployment the two
+// offenders were `aisix_ratelimit_remaining_{requests,tokens}` whose label carried a
+// model name that had since been renamed away — a zombie label combination that no
+// longer resolves to a quota. So the trigger is broader than "an unset limit":
+// ANY configuration change that invalidates a label combination can leave a series
+// that reports NaN. The handling does not depend on knowing which cause it was.
+//
+// SQLite has no NaN: the driver binds it as NULL, the `value` column is NOT NULL,
+// the INSERT throws — and since one scrape is one transaction, the WHOLE batch rolls
+// back. That is how ONE such series stopped collection for three days on a live
+// deployment while the endpoint, the network and the parser were all healthy.
 //
 // Skipping is the correct reading: NaN is not a measurement of zero, it is "not
 // applicable". Dropping that one sample keeps every real number around it.
@@ -483,7 +488,12 @@ export function finiteSamples(samples) {
 export function createMetricsCollector(cfg) {
   const dbFile = cfg.metricsDb || path.join(PROJECT_ROOT, 'data', 'metrics.db');
   const intervalSec = cfg.metricsScrapeIntervalSeconds ?? 10;
-  const retentionHours = cfg.metricsRetentionHours ?? 1;
+  // The `?? 24` fallback should never fire: config.js always supplies a value (its
+  // own default is 24). It said `?? 1` here, and a reader comparing the two files
+  // concluded the default was one hour — which is what the README said too. Both
+  // were wrong, and it cost an operator a mistaken capacity plan. Keep the two in
+  // step with the documented default.
+  const retentionHours = cfg.metricsRetentionHours ?? 24;
   const metricsBase = cfg.gateway?.metrics || '';
 
   const state = {

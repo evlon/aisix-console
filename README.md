@@ -91,17 +91,28 @@ npm start
 | `playgroundTimeoutMs` | 试玩请求超时（毫秒），防上游挂起卡死界面 |
 | `metricsDb` | 用量数据点 SQLite 落盘路径（默认 `data/metrics.db`） |
 | `metricsScrapeIntervalSeconds` | 抓取网关 `/metrics` 间隔（默认 10 秒） |
-| `metricsRetentionHours` | 用量数据保留时长（小时），到期自动清理并回收磁盘（默认 1 小时，主动设置才更长） |
+| `metricsRetentionHours` | 用量数据保留时长（小时），到期自动清理并回收磁盘（默认 **24 小时**）。容量请按实测估：1,157 条序列 ≈ 167 万行/天 ≈ 1.0 GB/天，所以 24h≈1 GB、72h≈3 GB —— 想按周/月看用量请走 `observability_exporters` 送给 Prometheus，不要把本地样本留很长 |
 | `reloadCommand` | 保存后重载命令；单容器部署用 `sh /usr/local/bin/gw-hup.sh`（扫本容器 `/proc` 找 `aisix` 进程发 SIGHUP，**无 pidfile**）；网关独立容器时改成 `docker kill -s HUP aisix`；留空则提示手动重载 |
 
 环境变量覆盖：`CONSOLE_PORT`、`CONSOLE_BIND`、`CONSOLE_RESOURCES_FILE`、`CONSOLE_AISIX_BIN`、`CONSOLE_AUTH_FILE`、`CONSOLE_RELOAD_COMMAND`、`CONSOLE_PLAYGROUND_TIMEOUT_MS`、`CONSOLE_CONFIG`、`CONSOLE_DEFAULT_PASSWORD`、`CONSOLE_METRICS_DB`、`CONSOLE_METRICS_SCRAPE_INTERVAL_SECONDS`、`CONSOLE_METRICS_RETENTION_HOURS`（上述 `CONSOLE_*` 均有 `AISIX_CONSOLE_*` 别名可覆盖）。
 
 ### 用量统计看板（/metrics）
 
-- **数据源**：网关默认开启的 Prometheus 监听（默认 `:9090` 的 `/metrics`）。控制台按 `metricsScrapeIntervalSeconds` 抓取，每个时间序列每分钟存一个点，按 `metricsRetentionHours` 滚动清理（默认 1 小时），所以网关重启后历史用量不丢。
+- **数据源**：网关默认开启的 Prometheus 监听（默认 `:9090` 的 `/metrics`）。控制台按 `metricsScrapeIntervalSeconds` 抓取，每个时间序列每分钟存一个点，按 `metricsRetentionHours` 滚动清理（默认 **24 小时**），所以网关重启后历史用量不丢。
+- **长时间没采集成功后重启/升级，第一次成功采集会把窗口之外的历史样本一次性清掉**（文件随之回收，可能从几百 MB 缩到几 MB）。这是保留策略在正常工作，不是数据损坏 —— 但升级前请先备份 `metrics.db`。反过来也成立：**如果你发现库里堆着远超保留期的历史，说明采集早就在失败**（见下一条）。
 - **前提**：`gateway.metrics` 必须能访问到运行中的网关；否则看板横幅会提示「网关不可达」，KPI 全 0。
+- **采集停更会被说出来**：采集失败会写容器日志（`[metrics] 采集失败：<原因>`，首次即写、之后每分钟至多一条）；界面在最后一条样本超过 5 分钟时会显示「数据已停更 N 小时（最后一条 …）」。两者都没有、页面却显示零，才是「真的没有流量」。
 - **指标**：请求量（按 outcome `success/client_error/upstream_error/rate_limited`）、输入/输出/总 Token、累计花费（micro-USD → USD）、请求延迟直方图（P50/P95）、在途请求数、限流拒绝数；并按 `model`、`api_key_id` 拆分明细。
 - **依赖 Node 22+**：采集器使用内置 `node:sqlite`（Node 22.5+ 可用，仅打印 ExperimentalWarning，无需原生依赖）。
+- **库变大后要复测聚合查询**：采集器本身已不再做全表统计，但用量页背后的聚合查询随库增长会变慢（3 GB 量级尚未实测）。复测时**必须同时看状态码与响应体大小** —— 只看 `time_total` 的探针会**把失败报告成变快**（登录态失效时返回 401 与几十字节，耗时反而小几十倍）：
+
+  ```bash
+  curl -s -o /dev/null \
+    -w 'HTTP %{http_code}  %{time_total}s  %{size_download} 字节\n' \
+    'http://127.0.0.1:8787/api/metrics/summary?range=24h'
+  ```
+
+  判据：正常是几十毫秒且体大小稳定在 KB 级；**若耗时爬进秒级并随库增长**，那是下一个问题（与采集器无关）。
 - 数据仅本地落盘，不上报任何外部服务。
 
 ## resources.yaml 的文件格式（v1 / v2）
