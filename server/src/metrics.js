@@ -14,6 +14,15 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 const METRICS_TIMEOUT_MS = 5000;
 
+// Bookkeeping cadences. Both of the operations below are synchronous and were
+// measured on a production store (1.34M rows, 1.17 GB): the distinct-series count
+// took 99.3 SECONDS and the row count 3.1s. Running them on every scrape (10s)
+// blocked the event loop, so the console answered /api/health in 39-102s and the
+// container was reported unhealthy while never actually failing a request. They
+// exist only to be displayed, so rarely is soon enough.
+const STATS_INTERVAL_MS = 5 * 60 * 1000;
+const VACUUM_INTERVAL_MS = 60 * 60 * 1000;
+
 // ---- range helpers ----------------------------------------------------------
 export const RANGES = {
   '15m': 900,
@@ -477,6 +486,7 @@ export function createMetricsCollector(cfg) {
     lastScrapeError: null,
     seriesCount: 0,
     dbRows: 0,
+    statsUpdatedAt: null,
     skippedNonFinite: 0,
     storedLastScrape: 0,
     retentionHours,
@@ -487,6 +497,8 @@ export function createMetricsCollector(cfg) {
   let db = null;
   let timer = null;
   let lastLoggedAt = 0;
+  let lastStatsAt = 0;
+  let lastVacuumAt = 0;
 
   // A failed scrape used to be completely silent: the only surface was
   // /api/metrics/overview, which needs a login. That is why a collector that had
@@ -540,11 +552,17 @@ export function createMetricsCollector(cfg) {
       db.prepare('DELETE FROM samples WHERE ts < ?').run(cutoff);
       db.exec('COMMIT');
       // Reclaim freed pages so the on-disk file shrinks back after pruning
-      // instead of holding its high-water size forever (INCREMENTAL mode).
-      try {
-        db.exec('PRAGMA incremental_vacuum');
-      } catch {
-        /* ignore — file size is a nicety, correctness already committed */
+      // instead of holding its high-water size forever (INCREMENTAL mode). At most
+      // hourly, not per scrape: this is an unbounded rewrite on a file that
+      // reached 1.17 GB in production.
+      const nowMs = Date.now();
+      if (nowMs - lastVacuumAt >= VACUUM_INTERVAL_MS) {
+        lastVacuumAt = nowMs;
+        try {
+          db.exec('PRAGMA incremental_vacuum');
+        } catch {
+          /* ignore — file size is a nicety, correctness already committed */
+        }
       }
       state.reachable = true;
       state.lastScrapeOk = true;
@@ -552,10 +570,20 @@ export function createMetricsCollector(cfg) {
       state.lastScrapeAt = now;
       state.skippedNonFinite = skipped;
       state.storedLastScrape = kept.length;
-      state.seriesCount = db
-        .prepare('SELECT COUNT(*) AS c FROM (SELECT DISTINCT metric, labels FROM samples)')
-        .get().c;
-      state.dbRows = db.prepare('SELECT COUNT(*) AS c FROM samples').get().c;
+      // The two counters below are for DISPLAY ONLY, and they are not cheap: on a
+      // production store (1.3M rows, 1.17 GB) `SELECT COUNT(*) FROM (SELECT
+      // DISTINCT metric, labels …)` measured 99.3 SECONDS and `COUNT(*)` 3.1s —
+      // both synchronous on the event loop, both re-run every scrape, which made
+      // the console unresponsive for ~100s at a time and the container report
+      // unhealthy while every request eventually succeeded. Refresh them rarely.
+      if (nowMs - lastStatsAt >= STATS_INTERVAL_MS) {
+        lastStatsAt = nowMs;
+        state.seriesCount = db
+          .prepare('SELECT COUNT(*) AS c FROM (SELECT DISTINCT metric, labels FROM samples)')
+          .get().c;
+        state.dbRows = db.prepare('SELECT COUNT(*) AS c FROM samples').get().c;
+        state.statsUpdatedAt = now;
+      }
     } catch (e) {
       try {
         db.exec('ROLLBACK');

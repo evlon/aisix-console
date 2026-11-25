@@ -34,13 +34,17 @@ const EXPOSITION = [
 ].join('\n');
 
 async function withStubGateway(body, fn) {
+  // `hits` lets a test prove how many scrapes actually happened, rather than
+  // assuming a sleep was long enough.
+  const seen = { hits: 0 };
   const srv = createServer((_req, res) => {
+    seen.hits += 1;
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4' });
     res.end(body);
   });
   await new Promise((r) => srv.listen(0, '127.0.0.1', r));
   try {
-    return await fn(srv.address().port);
+    return await fn(srv.address().port, seen);
   } finally {
     srv.close();
   }
@@ -129,4 +133,32 @@ test('a scrape that genuinely fails is reported, not swallowed', async () => {
   } finally {
     srv.close();
   }
+});
+
+// The store counters are display-only and they are NOT cheap: measured on a
+// production store, the distinct-series count took 99.3 seconds and the row count
+// 3.1s. Re-run on every scrape they blocked the event loop long enough that the
+// console answered /api/health in 39-102s and was reported unhealthy. They must be
+// computed rarely, which is what this pins.
+test('the display-only store counters are not recomputed on every scrape', async () => {
+  const dir = tmpDir();
+  await withStubGateway(EXPOSITION, async (port, seen) => {
+    const collector = createMetricsCollector({
+      metricsDb: path.join(dir, 'metrics.db'),
+      metricsScrapeIntervalSeconds: 1,
+      metricsRetentionHours: 24,
+      gateway: { metrics: `http://127.0.0.1:${port}` },
+    });
+    collector.start();
+    assert.ok(await waitFor(() => collector.getState().statsUpdatedAt != null));
+    const first = collector.getState().statsUpdatedAt;
+    // Prove more scrapes than the first one really happened before asserting the
+    // counter was not refreshed — otherwise this passes on a collector that died.
+    assert.ok(await waitFor(() => seen.hits >= 3, 6000), `only ${seen.hits} scrape(s) happened`);
+    assert.equal(
+      collector.getState().statsUpdatedAt,
+      first,
+      'the store counters were recomputed inside the throttle window',
+    );
+  });
 });
